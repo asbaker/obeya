@@ -10,8 +10,8 @@ A local-only shared Excalidraw canvas for a person and an AI agent.
 - `src/lib/`: pure modules: `args` + `commands` (parsing and every help screen), `merge`, `names` (page names: the rule, folders, case clashes), `geometry` (bounds, overlap), `report` (folding, coalescing, pointsAt, bands), `lint`, `layout` (patch layout directives), `store` (pages, change log, cursors, bands), `deck` (slide order, hotspots, HTML deck), `images` (image types and sizes from bytes; checks on patch files), `exporter` (export assembly shared by the CLI and the export dialog), `zip`, `library` (parsing, catalogue ids, search ranking, placing copies, contact-sheet layout), `libcache` (downloads and the per-user library cache), `chrome` (finding Chrome), `paths`, `security`, `machine` (a tiny state machine helper) + `page-machines` (the canvas page's machines as data). `layout`, `geometry`, `merge`, `names`, `machine` and `page-machines` are also loaded by the canvas page (served from `/lib/`, an allowlist in `server/main.mjs`), so they and anything they import must stay free of Node built-ins.
 - `docs/readme/`: the README's stills and their sources (pages drawn by obeya); `mise run stills` (`node docs/readme/stills.mjs`) redraws and exports them. Only original diagrams.
 - `docs/brand/logo.excalidraw`: the logo's source, a page (frames `logo-small`, `logo-lockup`); `mise run logo` exports `src/page/logo.svg` and `logo-lockup.svg`. Don't hand-edit the SVGs.
-- `src/skill.md`: printed by `--skill`, the full guide. Keep it in sync with the CLI.
-- `skills/obeya/SKILL.md`: the stub `npx skills add asbaker/obeya` installs; it points at `obeya --skill`. Same `description` as `src/skill.md` (a test checks). `INSTALL.md`: the setup guide an agent follows; keep its steps working.
+- `src/guide.md`: printed by `--skill`, the full guide. Keep it in sync with the CLI.
+- `skills/obeya/SKILL.md`: the stub `npx skills add asbaker/obeya` installs; it points at `obeya --skill`. Same `description` as `src/guide.md` (a test checks). `INSTALL.md`: the setup guide an agent follows; keep its steps working.
 - `test/*.test.mjs`: `npm test` (or `mise run test`). `test/smoke.browser.mjs`: `npm run test:smoke` / `mise run smoke` (needs Chrome). `mise.toml` pins Node and lists the dev tasks.
 
 ## Rules
@@ -19,7 +19,7 @@ A local-only shared Excalidraw canvas for a person and an AI agent.
 - No runtime dependencies. Node built-ins only; `playwright-core` is a dev dependency for the smoke test.
 - Privacy: never put local absolute paths, usernames, email addresses or other personal info in any repo file, including tests, docs and the skill text. Tests use temp dirs.
 - Port 4747 is the default and may be in use by a developer's own canvas: never stop it. Tests let the OS pick free ports (ephemeral range), so parallel test files can't race for one.
-- Every CLI command prints one JSON envelope (`{id, result}` or `{id, error: {code, message}}`). New errors get a stable `code`; document it in the skill (`src/skill.md`).
+- Every CLI command prints one JSON envelope (`{id, result}` or `{id, error: {code, message}}`). New errors get a stable `code`; document it in the skill (`src/guide.md`).
 - Mutating commands never run with defaults because arguments are missing.
 - Tests never touch the internet: library tests use the local stand-in catalogue in `test/fixtures/catalogue` (`OBEYA_CATALOGUE_URL`) and a temp `OBEYA_CACHE`.
 - Moving the Excalidraw pin requires the smoke test to pass. Re-check the arrow-binding workaround in `src/page/arrows.mjs` when it moves.

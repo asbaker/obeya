@@ -27,7 +27,7 @@ import { lib, libSummary, notifyLibraries, runLibrary } from "./library.mjs";
 export { CliError };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = path.join(here, "..", "skill.md");
+const SKILL = path.join(here, "..", "guide.md");
 const VERSION = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8")).version;
 
 /** Errors whose fix is for the person to do something. */

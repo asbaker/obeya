@@ -1,6 +1,6 @@
 // The installable skill (skills/obeya/SKILL.md, for `npx skills add asbaker/obeya`)
 // is a stub that points at `obeya --skill`, the full guide for the installed
-// version (src/skill.md). The two must agree on what triggers them.
+// version (src/guide.md). The two must agree on what triggers them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -10,7 +10,7 @@ const front = (text) => Object.fromEntries(
 
 test("the skill stub: same name and description as the full guide, and it points at obeya --skill", () => {
   const stub = fs.readFileSync("skills/obeya/SKILL.md", "utf8");
-  const full = fs.readFileSync("src/skill.md", "utf8");
+  const full = fs.readFileSync("src/guide.md", "utf8");
   const [s, f] = [front(stub), front(full)];
   assert.equal(s.name, "obeya");
   assert.equal(s.name, f.name);
@@ -18,4 +18,18 @@ test("the skill stub: same name and description as the full guide, and it points
   assert.match(stub, /obeya --skill/);
   assert.ok(stub.split("\n").length < 60, "a stub: the guide comes from the CLI");
   for (const text of [stub, full]) assert.doesNotMatch(text, /\/Users\/|\/home\/[a-z]|C:\\\\Users/, "no local paths");
+});
+
+test("only one skill file: skills installers take any skill.md they find, so the guide must not be one", () => {
+  const found = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+      const p = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(p);
+      else if (e.name.toLowerCase() === "skill.md") found.push(p);
+    }
+  };
+  walk(".");
+  assert.deepEqual(found, ["./skills/obeya/SKILL.md"]);
 });
