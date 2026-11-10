@@ -7,3 +7,5 @@ node_modules/
 /obeya/
 *.tmp
 .DS_Store
+# Pages drawn while working on this repo
+/docs/obeya/
