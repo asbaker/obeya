@@ -1,0 +1,35 @@
+{
+  "name": "obeya",
+  "version": "0.1.0",
+  "description": "A local-only shared Excalidraw canvas for a person and an AI agent, driven by a JSON CLI. Not an official Excalidraw project.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asbaker/obeya.git"
+  },
+  "homepage": "https://github.com/asbaker/obeya#readme",
+  "bugs": {
+    "url": "https://github.com/asbaker/obeya/issues"
+  },
+  "type": "module",
+  "bin": {
+    "obeya": "bin/obeya.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "node --test --test-timeout=180000 test/smoke.browser.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.65.0"
+  }
+}

@@ -1,0 +1,42 @@
+# Dev environment: `mise install`, then `mise run <task>` (`mise tasks` lists them).
+# The package itself needs only Node >= 22.20 (package.json `engines`); this pins
+# the version we develop and test on.
+
+[tools]
+node = "24"
+
+[tasks.setup]
+description = "Install dev dependencies (playwright-core, for the smoke test)"
+run = "npm ci"
+
+[tasks.test]
+description = "Unit and integration tests (no browser)"
+run = "npm test"
+
+[tasks.smoke]
+description = "End-to-end test in headless Chrome (needs Chrome or CHROME_PATH)"
+run = "npm run test:smoke"
+
+[tasks.check]
+description = "Everything: unit tests, then the smoke test"
+depends = ["test"]
+run = "npm run test:smoke"
+
+[tasks.brand]
+description = "Open the logo's source (docs/brand, a page in this repo) on port 4752"
+env = { OBEYA_DIR = "docs/brand", OBEYA_PORT = "4752" }
+run = "node bin/obeya.mjs open logo"
+
+[tasks.stills]
+description = "Redraw the README's stills: the pages in docs/readme, drawn by obeya in a headless browser, exported to docs/readme/*.png (needs Chrome)"
+run = "node docs/readme/stills.mjs"
+
+[tasks.logo]
+description = "Export the logo from docs/brand/logo.excalidraw into src/page/ (logo.svg and favicon.png from frame logo-small, logo-lockup.svg, and logo-lockup-dark.svg for the README in dark mode)"
+env = { OBEYA_DIR = "docs/brand", OBEYA_PORT = "4752" }
+run = [
+  "node bin/obeya.mjs export logo --frame logo-small --format svg --no-background --padding 0 --out src/page/logo.svg",
+  "node bin/obeya.mjs export logo --frame logo-lockup --format svg --no-background --padding 0 --out src/page/logo-lockup.svg",
+  "node bin/obeya.mjs export logo --frame logo-lockup-dark --format svg --no-background --padding 0 --out src/page/logo-lockup-dark.svg",
+  "node bin/obeya.mjs export logo --frame logo-small --format png --scale 0.5 --no-background --padding 0 --out src/page/favicon.png",
+]

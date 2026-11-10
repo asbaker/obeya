@@ -1,0 +1,118 @@
+{
+ "type": "excalidrawlib",
+ "version": 2,
+ "source": "fixture",
+ "libraryItems": [
+  {
+   "id": "i1",
+   "status": "published",
+   "created": 1,
+   "name": "Database",
+   "elements": [
+    {
+     "id": "db",
+     "type": "rectangle",
+     "x": 0,
+     "y": 0,
+     "width": 120,
+     "height": 60,
+     "angle": 0,
+     "strokeColor": "#1e1e1e",
+     "backgroundColor": "#a5d8ff",
+     "fillStyle": "solid",
+     "strokeWidth": 2,
+     "strokeStyle": "solid",
+     "roughness": 1,
+     "opacity": 100,
+     "groupIds": [],
+     "frameId": null,
+     "roundness": null,
+     "seed": 1,
+     "version": 3,
+     "versionNonce": 7,
+     "isDeleted": false,
+     "boundElements": [
+      {
+       "id": "db-label",
+       "type": "text"
+      }
+     ],
+     "updated": 1,
+     "link": null,
+     "locked": false
+    },
+    {
+     "id": "db-label",
+     "type": "text",
+     "x": 20,
+     "y": 17,
+     "width": 80,
+     "height": 25,
+     "angle": 0,
+     "strokeColor": "#1e1e1e",
+     "backgroundColor": "transparent",
+     "fillStyle": "solid",
+     "strokeWidth": 2,
+     "strokeStyle": "solid",
+     "roughness": 1,
+     "opacity": 100,
+     "groupIds": [],
+     "frameId": null,
+     "roundness": null,
+     "seed": 1,
+     "version": 3,
+     "versionNonce": 7,
+     "isDeleted": false,
+     "boundElements": null,
+     "updated": 1,
+     "link": null,
+     "locked": false,
+     "text": "DB",
+     "originalText": "DB",
+     "fontSize": 20,
+     "fontFamily": 5,
+     "textAlign": "center",
+     "verticalAlign": "middle",
+     "containerId": "db",
+     "autoResize": true,
+     "lineHeight": 1.25
+    }
+   ]
+  },
+  {
+   "id": "i2",
+   "status": "published",
+   "created": 1,
+   "name": "Load balancer",
+   "elements": [
+    {
+     "id": "lb",
+     "type": "ellipse",
+     "x": 0,
+     "y": 0,
+     "width": 60,
+     "height": 60,
+     "angle": 0,
+     "strokeColor": "#1e1e1e",
+     "backgroundColor": "#b2f2bb",
+     "fillStyle": "solid",
+     "strokeWidth": 2,
+     "strokeStyle": "solid",
+     "roughness": 1,
+     "opacity": 100,
+     "groupIds": [],
+     "frameId": null,
+     "roundness": null,
+     "seed": 1,
+     "version": 3,
+     "versionNonce": 7,
+     "isDeleted": false,
+     "boundElements": null,
+     "updated": 1,
+     "link": null,
+     "locked": false
+    }
+   ]
+  }
+ ]
+}

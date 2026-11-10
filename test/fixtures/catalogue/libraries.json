@@ -1,0 +1,47 @@
+[
+ {
+  "name": "Architecture Shapes",
+  "description": "Boxes for system architecture diagrams.",
+  "authors": [
+   {
+    "name": "Acme Example",
+    "url": "https://example.com"
+   }
+  ],
+  "source": "acme/shapes.excalidrawlib",
+  "itemNames": [
+   "Database",
+   "Load balancer"
+  ],
+  "created": "2024-01-01",
+  "updated": "2024-01-02",
+  "id": "f1"
+ },
+ {
+  "name": "Architecture Doodles",
+  "description": "Hand-drawn architecture bits, unnamed.",
+  "authors": [
+   {
+    "name": "Acme Example"
+   }
+  ],
+  "source": "acme/doodles.excalidrawlib",
+  "created": "2024-01-01",
+  "id": "f2"
+ },
+ {
+  "name": "Queues",
+  "description": "Messaging shapes.",
+  "authors": [
+   {
+    "name": "Zeta Example"
+   }
+  ],
+  "source": "zeta/shapes.excalidrawlib",
+  "itemNames": [
+   "Queue"
+  ],
+  "created": "2024-01-01",
+  "id": "f3"
+ }
+]

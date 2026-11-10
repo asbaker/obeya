@@ -1,0 +1,9 @@
+node_modules/
+# Sidecar state written next to pages (change log, cursors, logs, shots); and
+# its name before the rename, for folders not opened since
+.obeya/
+.excalidraw-local/
+# Default pages dir when the tool is run inside this repo
+/obeya/
+*.tmp
+.DS_Store
