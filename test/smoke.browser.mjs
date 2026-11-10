@@ -285,6 +285,22 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.deepEqual([...fs.readFileSync(png).subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(shot.json.result.width > 200 && shot.json.result.height > 100);
   assert.equal(shot.json.result.renderer, "tab");
+  // --around crops to some elements plus a margin: much smaller than their frame.
+  const near = await cli(["shot", "board", "--around", "n1,n2", "--out", path.join(S.tmp, "shots", "near.png")]);
+  assert.equal(near.code, 0, near.stdout);
+  assert.deepEqual(near.json.result.around, ["n1", "n2"]);
+  assert.ok(near.json.result.width > 400 && near.json.result.width < shot.json.result.width, `around: ${near.json.result.width} vs frame ${shot.json.result.width}`);
+  assert.ok(near.json.result.height > 200 && near.json.result.height < shot.json.result.height);
+  // Ids spread across most of a frame: the frame itself, and the result says so.
+  const wide = await cli(["shot", "board", "--around", "n1,n3,go", "--out", path.join(S.tmp, "shots", "wide.png")]);
+  assert.equal(wide.json.result.widenedTo, "f1", wide.stdout);
+  assert.equal(wide.json.result.frame, "f1");
+  assert.equal(near.json.result.widenedTo, undefined, "n1,n2 stays a crop");
+  // Uncapped with an explicit --scale; capped otherwise.
+  const big = await cli(["shot", "board", "--scale", "3", "--out", path.join(S.tmp, "shots", "big.png")]);
+  const capped = await cli(["shot", "board", "--out", path.join(S.tmp, "shots", "capped.png")]);
+  assert.ok(capped.json.result.width <= 1568 && capped.json.result.width * capped.json.result.height <= 1.16e6, JSON.stringify(capped.json.result));
+  assert.ok(big.json.result.width > capped.json.result.width);
 
   // 5. Present starts at the first frame in slide order, even when the view is on another one.
   await S.page.keyboard.press("Escape"); // nothing selected

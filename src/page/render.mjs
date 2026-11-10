@@ -6,9 +6,27 @@ import { answer, fail, getJSON } from "./server-link.mjs";
 import { flushSync } from "./sync.mjs";
 import { openPage } from "./pages.mjs";
 import { isCanvasLink } from "./links.mjs";
+import { bounds, boxAround, capScale, frameToWiden, overlapsBox } from "/lib/geometry.mjs";
+
+const AROUND_MARGIN = 40; // scene units of context around the elements a shot crops to
+const AREA_ID = "__obeya_shot_area";
+
+// A frame that isn't on the page, around `box`. Excalidraw's frame export clips
+// to it and draws only its children, so the elements overlapping the box are
+// handed over as (copied) children.
+function cropTo(elements, box) {
+  const frame = {
+    id: AREA_ID, type: "frame", name: null, x: box.x1, y: box.y1, width: box.x2 - box.x1, height: box.y2 - box.y1,
+    angle: 0, isDeleted: false, groupIds: [], frameId: null, boundElements: null, locked: false, link: null,
+    strokeColor: "transparent", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid",
+    roughness: 0, opacity: 100, roundness: null, seed: 1, version: 1, versionNonce: 1, updated: 0,
+  };
+  const inside = elements.filter((e) => e.type !== "frame" && overlapsBox(e, box)).map((e) => ({ ...e, frameId: AREA_ID }));
+  return { frame, elements: [frame, ...inside] };
+}
 
 // Render images of saved pages without touching what the person is looking at.
-export async function handleExport({ reqId, items, type, scale = 1, embedScene = false, padding = 20, background = true, dark = false }) {
+export async function handleExport({ reqId, items, type, scale = 1, embedScene = false, padding = 20, background = true, dark = false, cap = false }) {
   try {
     await flushSync(); // include the person's latest edits
     const scenes = new Map();
@@ -19,11 +37,27 @@ export async function handleExport({ reqId, items, type, scale = 1, embedScene =
       // Links into this canvas mean nothing in a shared file (they'd point at a
       // port on the recipient's machine); keep them only when the scene is
       // embedded to be reopened here. Ordinary web links stay.
-      const elements = scene.elements
+      let elements = scene.elements
         .filter((e) => !e.isDeleted)
         .map((e) => (!embedScene && isCanvasLink(e.link) ? { ...e, link: null } : e));
-      const exportingFrame = it.frame ? elements.find((e) => e.id === it.frame) : null;
+      let exportingFrame = it.frame ? elements.find((e) => e.id === it.frame) : null;
       if (it.frame && !exportingFrame) return fail(reqId, "unknown_element", `no element ${it.frame} on page ${it.page}`);
+      let widened = null;
+      if (it.around) {
+        const box = boxAround(elements, it.around, AROUND_MARGIN);
+        if (!box) return fail(reqId, "unknown_element", `none of ${it.around.join(", ")} is on page ${it.page}`);
+        // Most of a frame anyway? Then the frame itself: same cost, nothing cut off.
+        widened = frameToWiden(elements, it.around, box)?.id ?? null;
+        if (widened) exportingFrame = elements.find((e) => e.id === widened);
+        else ({ frame: exportingFrame, elements } = cropTo(elements, box));
+      }
+      // Shots for an agent: no bigger than what a vision model reads (it would scale the rest down anyway).
+      let s = scale;
+      if (cap) {
+        const b = exportingFrame ? bounds(exportingFrame) : elements.map(bounds).reduce((a, c) => ({ x1: Math.min(a.x1, c.x1), y1: Math.min(a.y1, c.y1), x2: Math.max(a.x2, c.x2), y2: Math.max(a.y2, c.y2) }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+        const pad = exportingFrame ? 0 : padding * 2;
+        s = capScale(b.x2 - b.x1 + pad, b.y2 - b.y1 + pad, scale);
+      }
       const r = await exportScene({
         type,
         data: {
@@ -32,10 +66,10 @@ export async function handleExport({ reqId, items, type, scale = 1, embedScene =
           files: scene.files || {},
         },
         // In this build rendering options go in config; appState only gives the default background.
-        config: { exportingFrame, scale, padding, embedScene, theme: dark ? "dark" : "light", ...(background ? {} : { canvasBackgroundColor: false }) },
+        config: { exportingFrame, scale: s, padding, embedScene, theme: dark ? "dark" : "light", ...(background ? {} : { canvasBackgroundColor: false }) },
       });
       if (type === "svg") {
-        out.push({ svg: r.outerHTML, width: Number(r.getAttribute("width")), height: Number(r.getAttribute("height")) });
+        out.push({ svg: r.outerHTML, width: Number(r.getAttribute("width")), height: Number(r.getAttribute("height")), ...(widened ? { widenedTo: widened } : {}) });
       } else {
         const bmp = await createImageBitmap(r);
         const png = await new Promise((res) => {
@@ -43,7 +77,7 @@ export async function handleExport({ reqId, items, type, scale = 1, embedScene =
           fr.onload = () => res(String(fr.result).split(",")[1]);
           fr.readAsDataURL(r);
         });
-        out.push({ png, width: bmp.width, height: bmp.height });
+        out.push({ png, width: bmp.width, height: bmp.height, ...(widened ? { widenedTo: widened } : {}) });
       }
     }
     answer(reqId, { items: out });

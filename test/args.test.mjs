@@ -59,6 +59,9 @@ test("values are validated", () => {
   usage(["changes", "board", "--since", "yesterday"], "invalid_argument");
   usage(["changes", "board", "--source", "robot"], "invalid_argument");
   usage(["shot", "board", "--scale", "0"], "invalid_argument");
+  usage(["shot", "board", "--around", " , "], "invalid_argument");
+  usage(["shot", "board", "--around", "a", "--frame", "f1"], "invalid_argument");
+  assert.deepEqual(parse(["shot", "board", "--around", "n1, n2,,n3"]).around, ["n1", "n2", "n3"]);
   usage(["describe", "board", "--format", "xml"], "invalid_argument");
   usage(["get", "../etc"], "invalid_argument");
   usage(["changes", "board", "--consumer", "a b"], "invalid_argument");

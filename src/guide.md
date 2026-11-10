@@ -83,7 +83,7 @@ obeya get roadmap --frame f-login --full
 obeya lint roadmap                     # layout problems: overlap, clipped-text, outside-frame, loose-arrow, near-miss, hidden
 ```
 
-`lint` findings are `{rule, ids, frame, message}`; `--frame` and `--rule overlap,hidden` narrow them. Run it after a big drawing session, or before showing the person a page.
+`lint` findings are `{rule, ids, frame, message}`; `--frame` and `--rule overlap,hidden` narrow them. Run it after a batch of patches and before showing the person a page: it costs a few dozen tokens, a screenshot costs a thousand or more.
 
 ## Changing the canvas: patches
 
@@ -213,13 +213,28 @@ A move whose element centre changes side gets `crossed: [{band, from, to}]`, wit
 
 Treat the person's annotations as instructions: a circled sticky with a comment next to it means "this one", so read `pointsAt` and the comment's `text` together.
 
-## Seeing the canvas
+## Checking your work
+
+Check with text, and look once per round:
+
+1. After each patch, read its `warnings` and fix them. They are the same checks as `lint`, for what you touched.
+2. After a batch of patches, run `obeya lint <page>` (or `--frame <id>`). It checks the whole page for a few dozen tokens; a screenshot costs a thousand or more.
+3. Take **one** screenshot for the round, before you tell the person it's done. Pick its scope by what you changed:
+
+| What you changed this round | The one screenshot |
+|---|---|
+| A few elements on an existing page | `--around` their ids, plus anything connected to them (an arrow's other end) |
+| A frame you built or rearranged | `--frame <id>` |
+| A new page, or a restructure across frames | the whole page |
+
+Never take a second, wider shot of the same change. The person has the whole page open and will mark what's wrong (you read it with `changes`), and `lint` and `describe` cover the rest of the page as text.
 
 ```bash
-obeya shot roadmap --frame f-login --out shots/login.png --scale 2
+obeya shot roadmap --around card-7,card-8 --out shots/check.png   # what you changed, plus a margin
+obeya shot roadmap --frame f-login --out shots/login.png           # one frame
 ```
 
-Prints `{out, width, height, renderer}`. Read the PNG with your image tool to check layout before you tell the person something is done. `shot` needs no open tab and doesn't open one when it can avoid it (it renders in a headless browser), so use it freely. `obeya show roadmap --frame f-login` points the person's view at a frame.
+Prints `{out, width, height, renderer}`; read the PNG with your image tool. `--around` takes the ids from the patch response. If they're all in one frame and the area would cover most of it, you get the frame instead, and `widenedTo` says so. Shots are capped at the size a vision model reads; pass `--scale` only when you need fine detail. `shot` needs no open tab and doesn't open one when it can avoid it (it renders in a headless browser). `obeya show roadmap --frame f-login` points the person's view at a frame.
 
 ## Links between frames (clickable prototypes)
 

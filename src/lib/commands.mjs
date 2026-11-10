@@ -115,12 +115,24 @@ export const COMMANDS = {
     ],
   },
   shot: {
-    usage: "shot <page> [--frame <id>] [--out <png>] [--scale <n>]",
-    summary: "Save a PNG of a page or frame",
+    usage: "shot <page> [--frame <id> | --around <id,id,…>] [--out <png>] [--scale <n>]",
+    summary: "Save a PNG of a page, a frame, or the area around some elements",
     page: true,
-    flags: ["frame", "out", "scale"],
+    flags: ["frame", "around", "out", "scale"],
+    validate(plan, bad) {
+      const { frame, around } = plan.flags;
+      if (around === undefined) return;
+      if (frame !== undefined) throw bad("use --frame or --around, not both");
+      plan.around = around.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!plan.around.length) throw bad("--around needs element ids, comma-separated");
+    },
     details: [
-      "Default --out is <dir>/.obeya/shots/<page>[-<frame>].png.",
+      "--around crops to those elements plus a margin, with whatever else is in that area:",
+      "the cheapest way to check what you just changed. If they're all in one frame and the area",
+      "would cover most of it, you get the frame instead (`widenedTo` in the result).",
+      "--frame shows one frame.",
+      "Shots are capped at the size a vision model reads (1568 px long edge, 1.15 megapixels)",
+      "unless you pass --scale. Default --out is <dir>/.obeya/shots/<page>[-<frame>|-around].png.",
       "Needs no open tab and never opens one if it can avoid it: the person's tab renders if one is",
       "connected, else a headless Chrome, else the official `excalidraw render` (@excalidraw/cli) if",
       "installed (never installed for you), else a tab is opened (exit 2 with --no-open).",
@@ -323,6 +335,7 @@ export const OPTION_TYPES = {
   skill: { type: "boolean" },
   version: { type: "boolean", short: "V" },
   frame: { type: "string" },
+  around: { type: "string" },
   rule: { type: "string" },
   full: { type: "boolean" },
   format: { type: "string" },

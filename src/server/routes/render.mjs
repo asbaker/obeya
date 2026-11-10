@@ -20,7 +20,7 @@ export function renderRoutes({ store, tabs, dir }) {
       return json(res, 200, { png: reply.png, width: reply.width, height: reply.height });
     }],
 
-    // body: {items: [{page, frame?}], type: "svg"|"png", scale?, embedScene?, padding?}
+    // body: {items: [{page, frame?, around?: [id]}], type: "svg"|"png", scale?, embedScene?, padding?, cap?}
     ["POST", "/api/export", async ({ req, res }) => {
       const body = await readJSON(req);
       if (!Array.isArray(body.items) || !body.items.length || !["svg", "png"].includes(body.type)) {
@@ -30,6 +30,13 @@ export function renderRoutes({ store, tabs, dir }) {
         if (!validPageName(it.page)) throw new ApiError(400, "bad_page_name", `bad page name "${it.page}"`);
         requirePage(store, it.page);
         requireElement(store, it.page, it.frame);
+        if (it.around !== undefined) {
+          if (it.frame) throw new ApiError(400, "invalid_argument", "use frame or around, not both");
+          if (!Array.isArray(it.around) || !it.around.length || it.around.length > 500 || !it.around.every((id) => typeof id === "string" && id)) {
+            throw new ApiError(400, "invalid_argument", "around is a list of element ids");
+          }
+          for (const id of it.around) requireElement(store, it.page, id);
+        }
       }
       const reply = await tabs.ask("export", body, { renderers: true, timeoutMs: 60000 });
       return json(res, 200, { items: reply.items });

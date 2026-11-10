@@ -213,15 +213,29 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     case "shot": {
       // The person's tab renders if one is open; otherwise a headless Chrome;
       // without Chrome, the official Excalidraw CLI if installed; else a tab.
+      // Capped at what a vision model reads, unless the caller asks for a scale.
       const scale = flags.scale ? Number(flags.scale) : 1;
+      const around = plan.around;
       const used = {};
+      const item = { page, ...(flags.frame ? { frame: flags.frame } : {}), ...(around ? { around } : {}) };
       const r = await withRenderer(plan, client, note, env,
-        () => client.call("POST", "/api/export", { items: [{ page, frame: flags.frame }], type: "png", scale, padding: 20 }).then((x) => x.items[0]),
-        { used, offline: () => officialRender(client, env, page, flags.frame, scale) });
-      const out = flags.out ? path.resolve(cwd, flags.out) : path.join(shotsDir(plan.dir), `${page}${flags.frame ? "-" + flags.frame : ""}.png`);
+        () => client.call("POST", "/api/export", { items: [item], type: "png", scale, padding: 20, cap: !flags.scale }).then((x) => x.items[0]),
+        // The official CLI can't crop to elements; without a tab or Chrome, --around opens a tab
+        // (after checking the ids, so a typo isn't reported as a missing tab).
+        { used, offline: async () => {
+          if (!around) return officialRender(client, env, page, flags.frame, scale);
+          const { scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
+          const live = new Set(scene.elements.filter((e) => !e.isDeleted).map((e) => e.id));
+          const missing = around.find((id) => !live.has(id));
+          if (missing) throw new CliError("unknown_element", `no element "${missing}" on page "${page}"`);
+          return null;
+        } });
+      const suffix = flags.frame ? `-${flags.frame}` : around ? "-around" : "";
+      const out = flags.out ? path.resolve(cwd, flags.out) : path.join(shotsDir(plan.dir), `${page}${suffix}.png`);
       fs.mkdirSync(path.dirname(out), { recursive: true });
       fs.writeFileSync(out, r.bytes ?? Buffer.from(r.png, "base64"));
-      return { page, frame: flags.frame ?? null, out, width: r.width, height: r.height, renderer: used.renderer };
+      // widenedTo: the crop covered most of one frame, so the shot is that frame.
+      return { page, frame: flags.frame ?? r.widenedTo ?? null, ...(around ? { around } : {}), ...(r.widenedTo ? { widenedTo: r.widenedTo } : {}), out, width: r.width, height: r.height, renderer: used.renderer };
     }
     case "library insert": {
       const { lib, item } = libraryItem;

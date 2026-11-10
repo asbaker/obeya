@@ -79,3 +79,12 @@ test("no tab, no Chrome, no official CLI: --no-open exits 2 with the link", asyn
     assert.equal(JSON.parse(r.stdout).error.code, "no_canvas_open");
   }
 });
+
+test("no tab, no Chrome: --around never falls back to the official CLI (it can't crop); --no-open exits 2", async () => {
+  const { env, calls } = await setup();
+  const r = await run(["shot", "board", "--around", "r1", "--no-open"], { env });
+  assert.equal(r.code, 2, r.stdout);
+  assert.equal(JSON.parse(r.stdout).error.code, "no_canvas_open");
+  assert.equal(fs.existsSync(calls), false, "the official CLI was not called");
+  assert.equal(JSON.parse((await run(["shot", "board", "--around", "nope", "--no-open"], { env })).stdout).error.code, "unknown_element");
+});
