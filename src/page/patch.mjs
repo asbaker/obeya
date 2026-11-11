@@ -62,6 +62,9 @@ async function offscreenEditor(page) {
 // never overlap, and the invisible editor holds one page at a time.
 export const queuePatch = (msg) => editorJob((hold) => handleAgentPatch(msg, hold));
 
+// Fields a re-applied skeleton keeps from the element when it doesn't give them.
+const KEPT_ON_RESKELETON = ["groupIds", "link", "customData", "locked", "angle", "backgroundColor", "strokeColor", "fillStyle", "strokeWidth", "strokeStyle", "roughness", "opacity", "roundness"];
+
 async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], delete: del = [], toBack = [], toFront = [], layout = [], files = {} }, hold) {
   let stacks = [];
   try {
@@ -100,7 +103,17 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     } catch (err) {
       return fail(reqId, "invalid_patch", err.message);
     }
-    const { skeleton: skel, deferred } = split;
+    const { deferred } = split;
+    // Re-labelling an element that exists: the new label keeps the old one's
+    // type size, font and colour unless given (before conversion, so it wraps right).
+    const skel = split.skeleton.map((sk) => {
+      if (!sk?.label || !byId.has(sk.id)) return sk;
+      const old = scene.find((e) => e.type === "text" && e.containerId === sk.id && !e.isDeleted);
+      if (!old) return sk;
+      const label = { ...sk.label };
+      for (const k of ["fontSize", "fontFamily", "strokeColor", "textAlign", "verticalAlign"]) if (!(k in label) && old[k] !== undefined) label[k] = old[k];
+      return { ...sk, label };
+    });
     const known = (id) => skel.some((s) => s.id === id) || live(id);
     const dangling = deferred.flatMap((d) => [d.start, d.end]).filter((id) => id && !known(id));
     if (dangling.length) return fail(reqId, "unknown_element", `arrow ends refer to unknown element(s): ${[...new Set(dangling)].join(", ")}`);
@@ -159,9 +172,29 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       } catch (err) {
         return fail(reqId, "invalid_patch", `skeleton: ${err?.message || err}`);
       }
+      // Re-applying a skeleton to an element that exists (the way to reword a
+      // label) builds it afresh: what the skeleton leaves out keeps its current
+      // value instead of a default, so the element stays in its frame, group and
+      // style, with its link and data. A frame in this patch listing it as a
+      // child still moves it.
+      const skelOf = new Map(skel.map((s) => [s.id, s]));
+      const claimed = new Set(skel.filter((s) => s.type === "frame").flatMap((s) => s.children ?? []));
+      const frameAlive = (id) => id && (out.get(id) ?? byId.get(id))?.type === "frame" && !(out.get(id) ?? byId.get(id)).isDeleted;
+      for (let el of converted) {
+        const cur = byId.get(el.id), given = skelOf.get(el.id);
+        if (!cur) created.push(el.id);
+        else if (given && !cur.isDeleted) {
+          const kept = {};
+          for (const k of KEPT_ON_RESKELETON) if (!(k in given) && k in cur) kept[k] = cur[k];
+          if (!("frameId" in given) && !claimed.has(el.id) && frameAlive(cur.frameId)) kept.frameId = cur.frameId;
+          el = { ...el, ...kept };
+        }
+        out.set(el.id, { ...el, version: (cur?.version ?? 0) + el.version });
+      }
+      // A new label belongs to its container's frame.
       for (const el of converted) {
-        if (!byId.has(el.id)) created.push(el.id);
-        out.set(el.id, { ...el, version: (byId.get(el.id)?.version ?? 0) + el.version });
+        const box = el.type === "text" && el.containerId && out.get(el.containerId);
+        if (box && el.frameId !== (box.frameId ?? null)) out.set(el.id, { ...out.get(el.id), frameId: box.frameId ?? null });
       }
       // Re-applying a skeleton to an existing labelled shape makes a new label
       // (with a new generated id): delete the old one, or it lingers as an

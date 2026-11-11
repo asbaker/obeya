@@ -1424,3 +1424,38 @@ test("wait: the ask shows on that page's tab only (other tabs count it in the pi
   await A.close();
   await B.close();
 });
+
+test("re-applying a skeleton to reword a label keeps the element's frame, group, style, link, data and label font", { skip }, async () => {
+  const opened = await cli(["open", "reskel", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "reskel", "--file", "-"], { stdin: JSON.stringify(p) });
+  let r = await patch({ skeleton: [
+    { type: "frame", id: "rf", x: 0, y: 0, width: 800, height: 500, name: "Column", children: ["card"] },
+    { type: "stickynote", id: "card", x: 40, y: 60, width: 260, backgroundColor: "#a5d8ff", link: "https://example.com/card", customData: { kind: "roadmap-card", rank: 3 }, groupIds: ["g-card"], label: { text: "Old wording", fontSize: 16 } },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  // The guide's way to reword a label: the same skeleton id, a new label, nothing else.
+  r = await patch({ skeleton: [{ type: "stickynote", id: "card", x: 40, y: 60, width: 260, label: { text: "New wording that is a good deal longer than the old one" } }] });
+  assert.equal(r.code, 0, r.stdout);
+  assert.deepEqual(r.json.result.warnings, [], "nothing sticks out of the frame");
+  const els = (await cli(["get", "reskel", "--full"])).json.result.elements;
+  const card = els.find((e) => e.id === "card"), label = els.find((e) => e.containerId === "card");
+  assert.equal(card.frameId, "rf", "still in its frame");
+  assert.deepEqual([card.backgroundColor, card.link, card.customData, card.groupIds], ["#a5d8ff", "https://example.com/card", { kind: "roadmap-card", rank: 3 }, ["g-card"]]);
+  assert.equal(label.text.replace(/\n/g, " "), "New wording that is a good deal longer than the old one");
+  assert.equal(label.fontSize, 16, "the label keeps its size");
+  assert.equal(label.frameId, "rf", "the new label is in the frame too");
+  assert.equal(els.filter((e) => e.containerId === "card").length, 1, "one label, no orphan");
+  // A skeleton that says otherwise still wins.
+  r = await patch({ skeleton: [{ type: "stickynote", id: "card", x: 40, y: 60, width: 260, backgroundColor: "#ffc9c9", label: { text: "Red now", fontSize: 20 } }] });
+  const after = (await cli(["get", "reskel", "--full"])).json.result.elements;
+  assert.equal(after.find((e) => e.id === "card").backgroundColor, "#ffc9c9");
+  assert.equal(after.find((e) => e.containerId === "card").fontSize, 20);
+  await A.close();
+});
