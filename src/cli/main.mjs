@@ -202,8 +202,12 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const rules = flags.rule ? flags.rule.split(",").filter(Boolean) : RULES;
       return { page, rev, findings: lint(scene.elements, { frame: flags.frame, rules }) };
     }
-    case "patch":
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
+    case "patch": {
+      // Counts, not echoes: the agent knows the ids it sent. What it acts on is `warnings`;
+      // what the editor did beyond the patch is in `changes --source agent --since <rev>`.
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
+      return { page: r.page, rev: r.rev, createdPage: r.createdPage, created: r.created.length, changed: r.changed.length, warnings: r.warnings };
+    }
     case "changes": {
       // POST: reading with "last" moves the consumer's read cursor.
       // By default: what the person did since this consumer's last read. The agent knows its own edits.

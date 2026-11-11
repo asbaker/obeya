@@ -169,7 +169,10 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   const patched = await patching;
   assert.equal(patched.code, 0, patched.stdout + patched.stderr);
   assert.equal(patched.json.id, undefined, "no id in the envelope");
-  for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(patched.json.result.created.includes(id), `created ${id}`);
+  // A short response: counts, not an echo of what was sent.
+  assert.ok(patched.json.result.created >= 9 && Number.isInteger(patched.json.result.changed), JSON.stringify(patched.json.result));
+  const made = new Set((await cli(["get", "board"])).json.result.elements.map((e) => e.id));
+  for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(made.has(id), `created ${id}`);
   assert.equal(patched.json.result.createdPage, true);
 
   // Moving a labelled note with an edit moves its label too.
@@ -1344,7 +1347,7 @@ test("images: an agent patches an image in by path; it is drawn, saved inside th
   await sleep(400);
   const r = await cli(["patch", "pictures", "--file", "-"], { stdin: JSON.stringify({ skeleton: [{ type: "image", id: "pic", src: pic, x: 100, y: 100, width: 200, height: 120 }] }) });
   assert.equal(r.code, 0, r.stdout);
-  assert.deepEqual(r.json.result.created, ["pic"]);
+  assert.equal(r.json.result.created, 1);
   const el = (await T(A, "elements")).find((e) => e.id === "pic");
   assert.equal(el.type, "image");
   assert.ok((await T(A, "files")).includes(el.fileId), "tab A has the file");

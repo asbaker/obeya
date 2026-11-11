@@ -54,7 +54,7 @@ Branch on `error.code`, not on the message. Exit codes: `0` ok, `1` error, `2` *
 | `canvas_timeout` | the tab didn't answer in time | retry; ask the person to check the tab |
 | `missing_argument`, `unknown_option`, `invalid_argument`, `unknown_command` | usage error | see the command's `--help` |
 
-**IDs are opaque.** Choose your own stable `id`s when you create elements, and otherwise read IDs from responses (`created`, `changed`, `get`, `changes`). Never derive an ID from an example or guess one. Bound label text gets a generated ID; address the container instead.
+**IDs are opaque.** Choose your own stable `id`s when you create elements, and otherwise read IDs from `describe`, `get` and `changes`. Never derive an ID from an example or guess one. Bound label text gets a generated ID; address the container instead.
 
 ## Lifecycle
 
@@ -112,7 +112,7 @@ JSON
 - Put text inside shapes as a `label`, not as a separate text element, so it moves with the shape.
 - To change a label's wording, re-apply the shape's skeleton with the new `label` (same `id`): that wraps the text to the shape. Editing the label's text element directly doesn't re-wrap it.
 - The page is created if it doesn't exist. The whole patch is one undo step for the person (Ctrl+Z).
-- The response lists `created` IDs and `changed` entries, including layout the editor did.
+- The response is short: `{page, rev, createdPage, created, changed, warnings}`, where `created` and `changed` are counts (labels and the editor's layout included). Act on `warnings`. To see exactly what the editor changed, `obeya changes <page> --source agent --since <rev before the patch>`.
 - The editor may adjust geometry: a frame created with `children` is re-fitted around them (its `x`, `y`, `width`, `height` are not kept), and arrows are re-routed between their bound shapes. Read positions back with `get` instead of assuming them. For exact artboards, follow up with an `elements` edit that sets the frame's `x`, `y`, `width` and `height`.
 - Arrows can bind to anything with an `id`, including sticky notes and elements from earlier patches. Bound arrows follow when the person moves a shape.
 
@@ -255,7 +255,7 @@ obeya shot roadmap --around card-7,card-8 --out shots/check.png   # what you cha
 obeya shot roadmap --frame f-login --out shots/login.png           # one frame
 ```
 
-Prints `{out, width, height, renderer}`; read the PNG with your image tool. `--around` takes the ids from the patch response. If they're all in one frame and the area would cover most of it, you get the frame instead, and `widenedTo` says so. Shots are capped at the size a vision model reads; pass `--scale` only when you need fine detail. `shot` needs no open tab and doesn't open one when it can avoid it (it renders in a headless browser). `obeya show roadmap --frame f-login` points the person's view at a frame.
+Prints `{out, width, height, renderer}`; read the PNG with your image tool. `--around` takes the ids you just patched. If they're all in one frame and the area would cover most of it, you get the frame instead, and `widenedTo` says so. Shots are capped at the size a vision model reads; pass `--scale` only when you need fine detail. `shot` needs no open tab and doesn't open one when it can avoid it (it renders in a headless browser). `obeya show roadmap --frame f-login` points the person's view at a frame.
 
 ## Links between frames (clickable prototypes)
 

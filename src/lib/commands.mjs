@@ -99,7 +99,8 @@ export const COMMANDS = {
     details: [
       "--file - reads the patch from stdin. --file is required; the command never waits on stdin by default.",
       "Creates the page if it doesn't exist. The patch is one undoable step for the person.",
-      "Read created and changed IDs from the response; don't guess them.",
+      "Prints {page, rev, createdPage, created, changed, warnings}: created and changed are counts (labels and the",
+      "editor's layout included). To see what the editor changed: `changes <page> --source agent --since <rev before>`.",
       "layout: align, distribute, grid, place (the next free spot in a frame or shape) and stack directives, applied in the same undo step.",
       "The response's warnings are lint findings (see `lint --help`) that involve what the patch touched.",
     ],
