@@ -1,7 +1,7 @@
 // Shot areas: the box around some elements, and the cap on a shot's size.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boxAround, capScale, frameToWiden, overlapsBox, SHOT_CAP } from "../src/lib/geometry.mjs";
+import { boxAround, capScale, frameAt, frameToWiden, outsideOf, overlapsBox, SHOT_CAP } from "../src/lib/geometry.mjs";
 
 const els = [
   { id: "a", type: "rectangle", x: 0, y: 0, width: 100, height: 50 },
@@ -48,4 +48,19 @@ test("frameToWiden: a crop covering most of one frame becomes that frame; otherw
   assert.equal(w(["c1", "d1"]), null, "two frames: stay a crop");
   assert.equal(w(["loose"]), null, "not in a frame");
   assert.equal(w(["g"]), "g", "a frame among the ids counts as its own");
+});
+
+test("frameAt: the topmost frame holding all of an element; none when it sticks out", () => {
+  const frames = [{ id: "f1", type: "frame", x: 0, y: 0, width: 500, height: 500 }, { id: "f2", type: "frame", x: 400, y: 0, width: 500, height: 500 }];
+  assert.equal(frameAt({ x: 10, y: 10, width: 100, height: 60 }, frames), "f1");
+  assert.equal(frameAt({ x: 420, y: 10, width: 60, height: 60 }, frames), "f2", "both hold it: the one on top");
+  assert.equal(frameAt({ x: 450, y: 10, width: 100, height: 60 }, frames.slice(0, 1)), null, "sticks out");
+  assert.equal(frameAt({ x: 0, y: 0, width: 500.5, height: 500 }, frames.slice(0, 1)), "f1", "a pixel of rounding is fine");
+  assert.equal(frameAt({ type: "arrow", x: 10, y: 10, points: [[0, 0], [200, 100]] }, frames.slice(0, 1)), "f1", "arrows by their points");
+});
+
+test("outsideOf: only when the boxes don't meet at all", () => {
+  const f = { id: "f", type: "frame", x: 0, y: 0, width: 500, height: 500 };
+  assert.equal(outsideOf({ x: 600, y: 0, width: 50, height: 50 }, f), true);
+  assert.equal(outsideOf({ x: 480, y: 0, width: 50, height: 50 }, f), false);
 });

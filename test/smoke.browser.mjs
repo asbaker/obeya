@@ -1459,3 +1459,45 @@ test("re-applying a skeleton to reword a label keeps the element's frame, group,
   assert.equal(after.find((e) => e.containerId === "card").fontSize, 20);
   await A.close();
 });
+
+test("frames by position: a new element inside a frame joins it, an edit moves it in or out; a patch that says where wins", { skip }, async () => {
+  const opened = await cli(["open", "framepos", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "framepos", "--file", "-"], { stdin: JSON.stringify(p) });
+  const frameOf = async () => Object.fromEntries((await cli(["get", "framepos", "--full"])).json.result.elements.map((e) => [e.id, e.frameId ?? null]));
+  let r = await patch({ skeleton: [
+    { type: "frame", id: "fa", x: 0, y: 0, width: 800, height: 600, name: "A" },
+    { type: "frame", id: "fb", x: 1000, y: 0, width: 800, height: 600, name: "B" },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  // Later patches, no frameId and no children: the way agents usually add things.
+  r = await patch({ skeleton: [
+    { type: "rectangle", id: "box", x: 40, y: 60, width: 200, height: 100, label: { text: "In A" } },
+    { type: "rectangle", id: "half", x: 700, y: 60, width: 200, height: 100 },
+    { type: "rectangle", id: "free", x: 40, y: 800, width: 200, height: 100 },
+    { type: "rectangle", id: "mine", x: 300, y: 60, width: 200, height: 100, frameId: null },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  let f = await frameOf();
+  const label = (await cli(["get", "framepos", "--full"])).json.result.elements.find((e) => e.containerId === "box");
+  assert.deepEqual([f.box, label.frameId, f.half, f.free, f.mine], ["fa", "fa", null, null, null], "inside joins, sticking out or outside doesn't, frameId: null is respected");
+  // An edit moves it into B, then out of every frame.
+  await patch({ elements: [{ id: "box", x: 1040, y: 60 }] });
+  f = await frameOf();
+  assert.equal(f.box, "fb");
+  await patch({ elements: [{ id: "box", x: 400, y: 800 }] });
+  f = await frameOf();
+  assert.equal(f.box, null);
+  // An edit that says its frame wins over position.
+  await patch({ elements: [{ id: "free", frameId: "fb" }] });
+  f = await frameOf();
+  assert.equal(f.free, "fb");
+  assert.equal((await cli(["lint", "framepos", "--rule", "outside-frame,overlap"])).json.result.findings.filter((x) => x.ids.includes("box")).length, 0);
+  await A.close();
+});

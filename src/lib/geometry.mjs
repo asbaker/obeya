@@ -24,6 +24,27 @@ function thicken(b) {
   }
   return out;
 }
+/**
+ * The frame an element lies in by position, as the editor decides when the
+ * person drops it: the topmost frame whose box holds all of it. `frames` in
+ * stacking order (bottom first); null when none does.
+ */
+export function frameAt(e, frames, tol = 1) {
+  const b = bounds(e);
+  let hit = null;
+  for (const f of frames) {
+    const F = bounds(f);
+    if (b.x1 >= F.x1 - tol && b.y1 >= F.y1 - tol && b.x2 <= F.x2 + tol && b.y2 <= F.y2 + tol) hit = f.id;
+  }
+  return hit;
+}
+
+/** True when an element's box and a frame's box don't meet at all. */
+export function outsideOf(e, frame) {
+  const b = bounds(e), F = bounds(frame);
+  return b.x2 <= F.x1 || b.x1 >= F.x2 || b.y2 <= F.y1 || b.y1 >= F.y2;
+}
+
 export const area = (b) => Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
 export const contains = (b, [x, y]) => x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2;
 

@@ -24,6 +24,18 @@ test("overlap: shapes in different frames don't count", () => {
   assert.deepEqual(rules([frame("f1", 0, 0, 500, 500), frame("f2", 0, 600, 500, 500), box("a", 10, 10, { frameId: "f1" }), box("b", 50, 30, { frameId: "f2" })], { rules: ["overlap"] }), []);
 });
 
+test("overlap: something in no frame over a framed shape counts (it's drawn over the frame)", () => {
+  const els = [frame("f", 0, 0, 500, 500), box("a", 10, 10, { frameId: "f" }), box("b", 50, 30)];
+  assert.deepEqual(rules(els, { rules: ["overlap"] }), [["overlap", "a", "b"]]);
+});
+
+test("overlap: two boxes stacked on each other, a few pixels apart", () => {
+  const els = [frame("f", 0, 0, 900, 900), note("card", 100, 190, { frameId: "f" }), note("link", 100, 188)];
+  assert.deepEqual(rules(els, { rules: ["overlap"] }), [["overlap", "card", "link"]]);
+  assert.match(lint(els, { rules: ["overlap"] })[0].message, /stacked/);
+  assert.deepEqual(rules([note("a", 0, 0), note("b", 0, 0)], { rules: ["overlap"] }), [["overlap", "a", "b"]]);
+});
+
 test("clipped-text: a label bigger than its shape", () => {
   assert.deepEqual(rules([box("a", 0, 0), label("t", "a", -10, 20, 120, 20)], { rules: ["clipped-text"] }), [["clipped-text", "a", "t"]]);
   assert.deepEqual(rules([box("a", 0, 0), label("t", "a", 10, 20, 80, 20)], { rules: ["clipped-text"] }), []);

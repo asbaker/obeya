@@ -46,6 +46,7 @@ Let the tool do the arithmetic. Applied in order, in the same undo step; things 
 
 ## What the editor changes
 
+- Frames follow position, as when the person drops something: a new element that lies wholly inside a frame joins it, and an edit that moves an element into a frame (or wholly out of its frame) updates its `frameId`. Give `frameId` (or `null`) to say otherwise.
 - A frame created with `children` is re-fitted around them: its `x`, `y`, `width`, `height` are not kept. For an exact artboard, follow up with an `elements` edit that sets them.
 - Arrows are re-routed between their bound shapes.
 - Read positions back with `get` instead of assuming them.

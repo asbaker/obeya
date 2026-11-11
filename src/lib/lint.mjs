@@ -17,6 +17,8 @@ const LOOSE_PX = 12; // an unbound arrow end this close to a shape looks attache
 const w = (b) => b.x2 - b.x1;
 const h = (b) => b.y2 - b.y1;
 const inside = (a, b, tol = TOL) => a.x1 >= b.x1 - tol && a.y1 >= b.y1 - tol && a.x2 <= b.x2 + tol && a.y2 <= b.y2 + tol;
+// Two boxes the same size within a few pixels, one over the other: one hides the other.
+const sameBox = (a, b, tol = NEAR_MISS_PX) => ["x1", "y1", "x2", "y2"].every((k) => Math.abs(a[k] - b[k]) <= tol);
 const overlapBox = (a, b) => ({ x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1), x2: Math.min(a.x2, b.x2), y2: Math.min(a.y2, b.y2) });
 const sharesGroup = (a, b) => (a.groupIds ?? []).some((g) => (b.groupIds ?? []).includes(g));
 const filled = (e) => FILLABLE.has(e.type) && (e.type === "image" || (e.backgroundColor && e.backgroundColor !== "transparent")) && (e.opacity ?? 100) > 50;
@@ -51,8 +53,14 @@ export function lint(elements, { frame, rules = RULES } = {}) {
     for (let i = 0; i < shapes.length; i++) {
       for (let j = i + 1; j < shapes.length; j++) {
         const a = shapes[i], b = shapes[j];
-        if ((a.frameId ?? null) !== (b.frameId ?? null) || sharesGroup(a, b)) continue;
+        // Different frames clip their contents apart; something in no frame is
+        // drawn over every frame, so it can still sit on a framed element.
+        if ((a.frameId && b.frameId && a.frameId !== b.frameId) || sharesGroup(a, b)) continue;
         const A = box.get(a.id), B = box.get(b.id);
+        if (sameBox(A, B)) {
+          add("overlap", [a, b], `${name(a)} and ${name(b)} are stacked on each other`);
+          continue;
+        }
         if (inside(A, B) || inside(B, A)) continue; // on top of, not overlapping
         const o = overlapBox(A, B);
         if (w(o) > TOL * 2 && h(o) > TOL * 2) add("overlap", [a, b], `${name(a)} and ${name(b)} overlap by ${Math.round(w(o))}×${Math.round(h(o))} px`);
@@ -135,7 +143,7 @@ export function lint(elements, { frame, rules = RULES } = {}) {
   if (on.has("hidden")) {
     for (const e of objects) {
       const E = box.get(e.id);
-      const cover = objects.find((s) => s !== e && filled(s) && order.get(s.id) > order.get(e.id) && !sharesGroup(s, e) && inside(E, box.get(s.id), 0));
+      const cover = objects.find((s) => s !== e && filled(s) && order.get(s.id) > order.get(e.id) && !sharesGroup(s, e) && inside(E, box.get(s.id), TOL));
       if (cover) add("hidden", [e, cover], `${name(e)} is under ${name(cover)}, which is filled and drawn above it; bring it to the front (toFront, or a stack layout)`);
     }
   }

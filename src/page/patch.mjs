@@ -2,6 +2,7 @@
 // undo step, in the visible editor for the page on screen or an invisible
 // second editor for any other page.
 import { computeLayout } from "/lib/layout.mjs";
+import { frameAt, outsideOf } from "/lib/geometry.mjs";
 import { h, createRoot, Excalidraw, convertToExcalidrawElements, restoreElements, CaptureUpdateAction } from "./deps.mjs";
 import { S, changedSinceKnown } from "./state.mjs";
 import { answer, fail, getJSON } from "./server-link.mjs";
@@ -107,6 +108,8 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     // Re-labelling an element that exists: the new label keeps the old one's
     // type size, font and colour unless given (before conversion, so it wraps right).
     const skel = split.skeleton.map((sk) => {
+      // The converter throws on a frame without `children`: an empty frame is fine.
+      if (sk?.type === "frame" && !Array.isArray(sk.children)) sk = { ...sk, children: [] };
       if (!sk?.label || !byId.has(sk.id)) return sk;
       const old = scene.find((e) => e.type === "text" && e.containerId === sk.id && !e.isDeleted);
       if (!old) return sk;
@@ -257,6 +260,32 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     for (const id of del) {
       for (const e of out.values()) {
         if (e.id === id || e.containerId === id) out.set(e.id, { ...e, isDeleted: true, version: e.version + 1, versionNonce: nonce() });
+      }
+    }
+
+    // Frames by position, as when the person drops something: a new element
+    // (or one an edit moved) that lies wholly inside a frame joins it, and a
+    // moved one that ends up wholly outside its frame leaves it. A patch that
+    // says where (frameId, or a frame's children) is left alone.
+    const said = new Set([
+      ...skel.filter((s) => s && "frameId" in s).map((s) => s.id),
+      ...skel.filter((s) => s?.type === "frame").flatMap((s) => s.children ?? []),
+      ...elements.filter((p) => "frameId" in p).map((p) => p.id),
+    ]);
+    const movedByEdit = elements.filter((p) => byId.has(p.id) && ["x", "y", "width", "height"].some((k) => k in p)).map((p) => p.id);
+    const frames = [...out.values()].filter((e) => e.type === "frame" && !e.isDeleted);
+    if (frames.length) {
+      for (const id of new Set([...created, ...movedByEdit])) {
+        const el = out.get(id);
+        if (!el || el.isDeleted || el.type === "frame" || el.containerId || said.has(id)) continue;
+        const at = frameAt(el, frames);
+        const cur = el.frameId ? frames.find((f) => f.id === el.frameId) : null;
+        let next = el.frameId ?? null;
+        if (at && at !== next) next = at;
+        else if (!at && cur && byId.has(id) && outsideOf(el, cur)) next = null;
+        if (next === (el.frameId ?? null)) continue;
+        out.set(id, { ...el, frameId: next });
+        for (const t of out.values()) if (t.containerId === id && !t.isDeleted) out.set(t.id, { ...t, frameId: next });
       }
     }
 
