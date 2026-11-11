@@ -1,5 +1,6 @@
 // Opening a page, and pointing the view at an element or frame.
 import { normalizePageName } from "/lib/names.mjs";
+import { setTitle } from "./ui/wait-banner.mjs";
 import { CaptureUpdateAction } from "./deps.mjs";
 import { RENDERER, S } from "./state.mjs";
 import { getJSON, postJSON, reportUsed } from "./server-link.mjs";
@@ -53,7 +54,7 @@ async function loadPage(name, hold) {
   history.replaceState(null, "", u.pathname + u.search);
   reportUsed();
   if (!RENDERER) rememberPage(name);
-  document.title = `obeya - ${name}`; // obeya first: narrow tabs still show it
+  setTitle(); // "obeya - <page>": obeya first, so narrow tabs still show it
   S.setUi((s) => ({ ...s, page: name }));
 }
 

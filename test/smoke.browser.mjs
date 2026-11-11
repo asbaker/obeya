@@ -1361,3 +1361,63 @@ test("images: an agent patches an image in by path; it is drawn, saved inside th
   assert.ok(fs.readFileSync(svg, "utf8").includes("data:image/png;base64,"));
   for (const t of tabs) await t.close();
 });
+
+test("wait: the ask shows on that page's tab only (other tabs count it in the pill), the frame outlined; Done returns the person's changes", { skip }, async () => {
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const open = async (page) => {
+    const v = new URL(u.href);
+    v.searchParams.set("page", page);
+    const t = await S.context.newPage();
+    await t.setViewportSize({ width: 1600, height: 1000 });
+    await t.goto(v.href);
+    await until(() => t.evaluate(() => window.obeyaTest?.ready()), { what: `tab on ${page} ready`, timeout: 60000 });
+    return t;
+  };
+  const A = await open("board");
+  await A.mouse.click(1500, 900);
+  assert.equal((await cli(["patch", "wait-other", "--file", "-"], { stdin: JSON.stringify({ skeleton: [{ type: "rectangle", id: "o1", x: 0, y: 0, width: 80, height: 40 }] }) })).code, 0);
+  const B = await open("wait-other");
+  await cli(["changes", "board"]); // the agent is up to date
+  await A.bringToFront();
+
+  const waiting = cli(["wait", "board", "--ask", "Move the first note, then press Done", "--frame", "f1"]);
+  await A.waitForSelector('[data-testid="wait-banner"]', { timeout: 10000 });
+  assert.equal(await A.textContent('[data-testid="wait-ask"]'), "Move the first note, then press Done");
+  assert.ok(await A.isVisible('[data-testid="wait-frame"]'), "the frame is outlined");
+  assert.match(await A.title(), /^● obeya - board$/);
+  // It follows the editor's theme: Excalidraw's own toggle (Shift+Alt+D), and back.
+  const bannerBg = () => A.evaluate(() => getComputedStyle(document.querySelector(".xl-wait")).backgroundColor);
+  const light = await bannerBg();
+  await A.keyboard.press("Alt+Shift+KeyD");
+  await until(async () => (await bannerBg()) !== light, { what: "the banner turns dark" });
+  assert.equal(await bannerBg(), "rgb(35, 35, 41)");
+  await A.keyboard.press("Alt+Shift+KeyD");
+  await until(async () => (await bannerBg()) === light, { what: "and light again" });
+  await until(async () => /^obeya - wait-other$/.test(await B.title()), { what: "the other tab's title is unmarked" });
+  assert.equal(await B.$('[data-testid="wait-banner"]'), null, "no banner on another page");
+  assert.equal(await B.textContent('[data-testid="pill-waiting"]'), "(1 waiting)", "the other tab's page pill counts it");
+  assert.equal(await B.evaluate(() => window.obeyaTest.page()), "wait-other", "nothing switched the other tab");
+
+  // The person drags something, then presses Done.
+  const TA = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
+  const n1 = (await TA("elements")).find((e) => e.id === "n1");
+  const p = await TA("toClient", n1.x + 30, n1.y + 30);
+  await A.mouse.move(p.x, p.y);
+  await A.mouse.down();
+  for (let i = 1; i <= 10; i++) await A.mouse.move(p.x + i * 6, p.y + i * 3);
+  await A.mouse.up();
+  await A.click('[data-testid="wait-done"]');
+  const r = await waiting;
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.equal(r.json.result.done, "button");
+  // Whatever is on top there (an earlier test drops an image over the note) moved: the person's change comes back.
+  assert.ok(r.json.result.changes.some((c) => c.moved), JSON.stringify(r.json.result.changes));
+  assert.doesNotMatch(r.stderr, /no tab shows/, "a tab showed the page: no link needed");
+  await until(async () => !(await A.$('[data-testid="wait-banner"]')), { what: "the banner goes" });
+  await until(async () => !(await B.$('[data-testid="pill-waiting"]')), { what: "the pill count goes" });
+  assert.match(await A.title(), /^obeya - board$/);
+  await A.close();
+  await B.close();
+});

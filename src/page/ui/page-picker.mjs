@@ -18,7 +18,7 @@ function edited(iso) {
   return `edited ${new Date(iso).toLocaleDateString()}`;
 }
 
-export function PagePicker({ pages, skipped, current, onClose, onNew }) {
+export function PagePicker({ pages, skipped, current, waiting = new Set(), onClose, onNew }) {
   const [query, setQuery] = React.useState("");
   const [hl, setHl] = React.useState(0);
   const [fresh, setFresh] = React.useState(null);
@@ -83,6 +83,7 @@ export function PagePicker({ pages, skipped, current, onClose, onNew }) {
       b.create
         ? h("span", null, "+ New page ", h("b", null, baseName(b.name)))
         : h("span", null, h("span", { className: "xl-base" }, baseName(b.name)), b.name === current ? h("span", { className: "here" }, "open now") : null,
+          waiting.has(b.name) ? h("span", { className: "xl-waiting", "data-testid": "picker-waiting", title: "Your agent is waiting for you on this page" }, "● waiting for you") : null,
           b.showFolder && folderOf(b.name) ? h("span", { className: "xl-in" }, folderOf(b.name).split("/").join(" / ")) : null),
       h("span", { className: "meta" }, b.create ? (folderOf(b.name) ? `saved now, in ${folderOf(b.name)}` : "saved now, empty") : meta(p)));
   };

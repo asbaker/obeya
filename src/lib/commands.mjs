@@ -148,6 +148,26 @@ export const COMMANDS = {
     flags: ["frame"],
     live: true,
   },
+  wait: {
+    usage: "wait <page> --ask <text> [--frame <id>] [--timeout <minutes>] [--consumer <name>]",
+    summary: "Ask the person for something on a page; return their changes when they press Done",
+    page: true,
+    flags: ["ask", "frame", "timeout", "consumer"],
+    required: ["ask"],
+    details: [
+      "Tabs showing the page show --ask in a banner with a Done button (and outline --frame). Other tabs stay quiet: the page",
+      "pill counts pages waited on and the picker marks them. No tab is opened or switched; if none shows the page, the link is printed.",
+      "Returns {page, frame, done, waited, rev, since, changes} when the person presses Done (done: \"button\"), on --timeout",
+      "(\"timeout\"), or when the server stops (\"stopped\"). `changes` is what `changes <page>` would print, and moves the same cursor.",
+      "No timeout by default: run it in the background if your shell limits how long a command may run; stopping the command",
+      "takes the banner down.",
+    ],
+    validate(plan, bad) {
+      const { ask, timeout } = plan.flags;
+      if (!ask.trim() || ask.length > 500) throw bad("--ask is the text to show the person (1-500 characters)");
+      if (timeout !== undefined && !(/^\d+(\.\d+)?$/.test(timeout) && Number(timeout) > 0)) throw bad("--timeout is a number of minutes");
+    },
+  },
   export: {
     usage: "export <page>... --format svg|png|pdf|html --out <path> [--frame <id> | --frames] [--order <id,id,…>] [--title <text>] [--scale <n>] [--padding <n>] [--no-background] [--dark] [--embed-scene]",
     summary: "Files to share: an image, one image per frame, a PDF, or a self-contained HTML slideshow",
@@ -338,6 +358,8 @@ export const OPTION_TYPES = {
   version: { type: "boolean", short: "V" },
   frame: { type: "string" },
   around: { type: "string" },
+  ask: { type: "string" },
+  timeout: { type: "string" },
   rule: { type: "string" },
   full: { type: "boolean" },
   format: { type: "string" },

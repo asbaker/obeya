@@ -8,6 +8,7 @@ import { applyRemote, flushSync, setOnline } from "./sync.mjs";
 import { queuePatch } from "./patch.mjs";
 import { handleExport, handleLibrarySheet, handleShow, loadLibraries } from "./render.mjs";
 import { forgetPage, openPage, recentPages, rememberPage } from "./pages.mjs";
+import { setTitle, setWaits } from "./ui/wait-banner.mjs";
 
 export function notice(html) {
   document.getElementById("notice-text").innerHTML = html;
@@ -66,6 +67,7 @@ export function connectEvents() {
   events.addEventListener("export", (e) => handleExport(JSON.parse(e.data)));
   events.addEventListener("library-sheet", (e) => handleLibrarySheet(JSON.parse(e.data)));
   events.addEventListener("libraries-changed", () => loadLibraries());
+  events.addEventListener("waits", (e) => setWaits(JSON.parse(e.data).waits));
   events.addEventListener("pages", (e) => {
     const { pages, skipped } = JSON.parse(e.data);
     S.setUi((s) => ({ ...s, pages, skipped }));
@@ -77,7 +79,7 @@ export function connectEvents() {
     const u = new URL(location.href);
     u.searchParams.set("page", to);
     history.replaceState(null, "", u.pathname + u.search);
-    document.title = `obeya - ${to}`;
+    setTitle();
     rememberPage(to);
     S.setUi((s) => ({ ...s, page: to }));
   });

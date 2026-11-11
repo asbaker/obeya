@@ -134,3 +134,27 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif;
 .xl-folder:hover .xl-here, .xl-folder .xl-here:focus { visibility: visible; }
 .xl-row.indent { padding-left: 26px; }
 .xl-in { margin-left: 10px; font-size: 12px; color: #868e96; }
+
+/* An agent waiting for the person (obeya wait): the ask under the toolbar, the frame outlined. */
+.xl-waits { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; flex-direction: column; gap: 8px; width: min(640px, calc(100vw - 32px)); pointer-events: none; }
+.xl-wait { pointer-events: auto; display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 16px; border-radius: 12px; background: #fff; color: #1e1e1e;
+  border: 1px solid #d0bfff; border-left: 6px solid #7048e8; box-shadow: 0 6px 24px rgba(30, 30, 30, .12); font: 15px system-ui, sans-serif; }
+.xl-wait-icon { flex: none; width: 44px; height: 44px; border-radius: 50%; background: #f3f0ff; border: 1px solid #d0bfff; display: grid; place-items: center; }
+.xl-wait-icon img { width: 28px; height: 28px; }
+.xl-wait-text { flex: 1; min-width: 0; }
+.xl-wait-from { font-size: 13px; font-weight: 600; color: #7048e8; margin-bottom: 2px; }
+.xl-wait-ask { font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-wrap; }
+.xl-wait-done { flex: none; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 10px 16px; background: #7048e8; color: #fff; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+.xl-wait-done:hover { background: #5f3dc4; }
+.xl-wait-done kbd { font: 12px system-ui, sans-serif; color: #e5dbff; }
+.xl-wait-frame { position: fixed; z-index: 3; pointer-events: none; border: 2px dashed #7048e8; border-radius: 10px; }
+.xl-waiting { margin-left: 8px; font-size: 12px; color: #7048e8; }
+.xl-pill .xl-pill-waiting { color: #7048e8; font-weight: 600; }
+/* The banner sits outside Excalidraw's themed container: follow its dark theme by hand. */
+body:has(.excalidraw.theme--dark) .xl-wait { background: #232329; color: #e9ecef; border-color: #4c3d80; border-left-color: #9775fa; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+body:has(.excalidraw.theme--dark) .xl-wait-icon { background: #2e2747; border-color: #4c3d80; }
+body:has(.excalidraw.theme--dark) .xl-wait-from { color: #b197fc; }
+body:has(.excalidraw.theme--dark) .xl-wait-done { background: #7950f2; }
+body:has(.excalidraw.theme--dark) .xl-wait-done:hover { background: #9775fa; }
+body:has(.excalidraw.theme--dark) .xl-wait-frame { border-color: #9775fa; }
+body:has(.excalidraw.theme--dark) .xl-pill .xl-pill-waiting { color: #b197fc; }

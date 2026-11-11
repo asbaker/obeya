@@ -268,6 +268,13 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       return await client.call("DELETE", `/api/pages/${encodeURIComponent(page)}/bands/${plan.args.name}`);
     case "show":
       return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/show`, { frame: flags.frame });
+    case "wait": {
+      // Never open or switch a tab: the person keeps their focus. The page pill counts what's waiting.
+      const i = await client.info();
+      if (!i?.showing?.includes(page)) note(`no tab shows ${page}; the request waits there: ${client.canvasUrl(page, flags.frame)}`);
+      const timeoutMs = flags.timeout ? Math.round(Number(flags.timeout) * 60000) : 0;
+      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/wait`, { ask: flags.ask, frame: flags.frame, consumer: plan.consumer, timeoutMs });
+    }
   }
   throw new CliError("unknown_command", `unknown command "${cmd}"`);
 }

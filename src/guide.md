@@ -60,7 +60,7 @@ Branch on `error.code`, not on the message. Exit codes: `0` ok, `1` error, `2` *
 
 - The server starts by itself on the first command that needs it, bound to `127.0.0.1` on the pages folder's own port (see Ports above; `--port` or `OBEYA_PORT` override). `obeya status` never starts it; `obeya stop` saves and stops it. It also stops itself after 12 idle hours (no tab, no calls; `--idle-timeout <minutes>`, `0` = never) and restarts on the next command, so don't treat a stopped server as an error.
 - Read-only commands (`pages`, `get`, `describe`, `changes`) need no browser tab.
-- Live commands (`patch`, `show`, `library insert`) need a connected tab. `shot` and `export` don't. If none is connected, the CLI opens one in the person's default browser and waits up to 30 s.
+- Live commands (`patch`, `show`, `library insert`) need a connected tab (`wait` doesn't: it never opens one). `shot` and `export` don't. If none is connected, the CLI opens one in the person's default browser and waits up to 30 s.
 - With `--no-open` the CLI never opens a browser: it exits `2` with `error.code: "no_canvas_open"` and the link in `error.url`. Prefer `--no-open` when the person might not be at the screen, and hand them the link.
 - `obeya open [<page>] [--frame <id>]` brings the canvas up for the person, or switches the open tab.
 - Always pass the same `--dir` (or set `OBEYA_DIR`) for a project.
@@ -217,6 +217,22 @@ A move whose element centre changes side gets `crossed: [{band, from, to}]`, wit
 **Before you rearrange anything the person can see, read `changes` first.** They may have just circled or commented on it; if you move the thing, move their marks with it (or ask), or their circle ends up pointing at nothing.
 
 Treat the person's annotations as instructions: a circled sticky with a comment next to it means "this one", so read `pointsAt` and the comment's `text` together.
+
+## Asking the person for something: wait
+
+When you need the person to do something on a page (answer questions, triage, review a draft, place or rank cards, mark what's wrong), ask on the page instead of in the chat, and wait for them:
+
+```bash
+obeya wait roadmap --frame f-questions --ask "Answer the questions in this frame on stickies, then press Done"
+```
+
+Tabs showing that page show your `--ask` in a banner with a **Done** button (Cmd/Ctrl+Enter), with `--frame` outlined. Everywhere else it stays quiet so the person keeps their focus: the page pill says "(1 waiting)" and the page picker marks the page. No tab is ever opened or switched. If no tab shows the page, `wait` prints its link: **tell the person in the chat which page you're waiting on**, with the link.
+
+When they press Done it returns `{page, frame, done, waited, rev, since, changes}`: `changes` is exactly what `obeya changes <page>` would print, and it moves the same cursor. `done` is `"button"`, `"timeout"` (with `--timeout <minutes>`) or `"stopped"` (the server stopped). There is no timeout by default.
+
+- **Run it in the background** if your shell limits how long a command may run (Claude Code: `run_in_background`); you are told when it exits. Stopping the command takes the banner down.
+- Keep the ask short and concrete: one sentence that names where and what. Their reply is what they draw: sticky notes, circles, moves.
+- Don't repeat the ask in the chat; say which page you're waiting on.
 
 ## Checking your work
 

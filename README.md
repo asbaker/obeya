@@ -124,6 +124,7 @@ $ obeya changes signup-flow
 |---|---|
 | `obeya patch <page>` | Add, change or delete elements through the live editor |
 | `obeya changes <page>` | What the person changed since the agent last looked, and what each annotation points at |
+| `obeya wait <page> --ask "…"` | Ask you for something on the page; returns your changes when you press Done |
 | `obeya describe <page>` | A plain-text outline of the page |
 | `obeya shot <page>` | A PNG, so the agent can look at the page |
 | `obeya export <page>` | PNG, SVG, PDF or an HTML slideshow |

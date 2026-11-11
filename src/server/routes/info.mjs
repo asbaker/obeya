@@ -9,7 +9,7 @@ import { loadAllCached } from "../../lib/libcache.mjs";
 export function infoRoutes({ tabs, dir, port, version, idleMinutes, shutdown }) {
   return [
     ["GET", "/api/info", ({ res }) => json(res, 200, {
-      app: "obeya", version, dir, port, pid: process.pid, browsers: tabs.count("person"), renderers: tabs.count("renderer"), idleTimeout: idleMinutes, pdf: Boolean(findChrome()),
+      app: "obeya", version, dir, port, pid: process.pid, browsers: tabs.count("person"), showing: tabs.showingPages(), renderers: tabs.count("renderer"), idleTimeout: idleMinutes, pdf: Boolean(findChrome()),
     })],
     ["POST", "/api/shutdown", ({ res }) => {
       res.on("finish", shutdown);

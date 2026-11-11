@@ -18,6 +18,7 @@ import { PresentControls } from "./ui/present-controls.mjs";
 import { AboutDialog } from "./ui/about.mjs";
 import { dialogs, openDialog, closeDialog } from "./ui/dialogs.mjs";
 import { NewPageDialog } from "./ui/new-page.mjs";
+import { WaitBanner, waitsOn } from "./ui/wait-banner.mjs";
 
 // Keys: Cmd+O / Ctrl+O opens the page picker; Shift+Alt+P starts or stops
 // presenting (Excalidraw uses neither); while presenting, arrows step and Esc stops.
@@ -85,7 +86,7 @@ const welcome = (page) =>
         h(WelcomeScreen.Center.MenuItem, { onSelect: () => S.openPicker(), shortcut: KEY_PAGES, "data-testid": "welcome-pages" }, "Open page…"))));
 
 function App() {
-  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false });
+  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [] });
   const [dialog, setDialog] = React.useState(dialogs.state);
   React.useEffect(() => dialogs.subscribe(setDialog), []);
   S.setUi = set;
@@ -100,6 +101,7 @@ function App() {
   }, []);
 
   const n = ui.pages.length;
+  const waiting = new Set(ui.waits.map((w) => w.page)).size;
   const pill = (isMobile) => ui.present || RENDERER ? null :
     h("button", { className: "xl-pill", onClick: S.openPicker, "data-testid": "page-pill", title: `Open page (${KEY_PAGES})` },
       h("img", { className: "xl-mark", src: "/page/logo.svg", alt: "", "aria-hidden": true, "data-testid": "pill-mark" }),
@@ -107,6 +109,8 @@ function App() {
       ui.page && folderOf(ui.page) ? h("span", { className: "xl-muted", "data-testid": "pill-folder" }, `${folderOf(ui.page).split("/").join(" / ")} / `) : null,
       h("b", null, ui.page ? baseName(ui.page) : "…"),
       isMobile ? null : h("span", { className: "xl-muted" }, `· ${n} page${n === 1 ? "" : "s"}`),
+      // Pages an agent waits on (obeya wait): counted here, marked in the picker; nothing louder, so the person keeps their focus.
+      waiting ? h("span", { className: "xl-pill-waiting", "data-testid": "pill-waiting", title: "Your agent is waiting for you: open the page list" }, `(${waiting} waiting)`) : null,
       h("span", { className: "xl-muted", "aria-hidden": true }, "▾"));
   const present = () => ui.present || RENDERER ? null :
     h("span", { className: "xl-tipwrap" },
@@ -161,7 +165,8 @@ function App() {
           h(MainMenu.DefaultItems.ChangeCanvasBackground)),
         RENDERER ? null : welcome(ui.page))),
     ui.present && ui.presentPos ? h(PresentControls, { pos: ui.presentPos }) : null,
-    dialog === "picker" ? h(PagePicker, { pages: ui.pages, skipped: ui.skipped, current: ui.page, onClose: closeDialog, onNew: (folder) => newPage(folder) }) : null,
+    !RENDERER && !ui.present && ui.waits.some((w) => w.page === ui.page) ? h(WaitBanner, { waits: ui.waits.filter((w) => w.page === ui.page) }) : null,
+    dialog === "picker" ? h(PagePicker, { pages: ui.pages, skipped: ui.skipped, current: ui.page, waiting: new Set(ui.waits.map((w) => w.page)), onClose: closeDialog, onNew: (folder) => newPage(folder) }) : null,
     dialog === "new" ? h(NewPageDialog, { names: ui.pages.map((p) => p.name), folder: ui.newIn ?? folderOf(ui.page ?? ""), onClose: closeDialog }) : null,
     dialog === "rename" ? h(RenameDialog, { current: ui.page, names: ui.pages.map((p) => p.name), onClose: closeDialog }) : null,
     dialog === "export" ? h(ExportDialog, { page: ui.page, onClose: closeDialog }) : null,

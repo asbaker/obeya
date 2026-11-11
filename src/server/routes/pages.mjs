@@ -43,7 +43,7 @@ function validatePatch(body) {
 }
 
 /** @param {{store: any, tabs: any, pages: any}} ctx */
-export function pageRoutes({ store, tabs, pages }) {
+export function pageRoutes({ store, tabs, pages, waits }) {
   // Recent agent patches per page: a sync may report the editor's late layout
   // for them as the agent's (`layout`), but only for these elements and briefly.
   const LAYOUT_WINDOW_MS = 5000;
@@ -151,6 +151,7 @@ export function pageRoutes({ store, tabs, pages }) {
         throw err;
       }
       tabs.renamed(name, to);
+      waits.renamed(name, to);
       tabs.broadcast("page-renamed", { from: name, to });
       pages.announce();
       return json(res, 200, { from: name, to, staleLinks: store.linksTo(name) });
@@ -174,6 +175,7 @@ export function pageRoutes({ store, tabs, pages }) {
         throw err;
       }
       tabs.deleted(name);
+      waits.deleted(name);
       tabs.broadcast("page-deleted", { page: name });
       pages.announce();
       return json(res, 200, { page: name, staleLinks });
@@ -201,6 +203,26 @@ export function pageRoutes({ store, tabs, pages }) {
       requireElement(store, name, body.frame);
       await tabs.ask("show", { page: name, frame: body.frame });
       return json(res, 200, { page: name, frame: body.frame ?? null, shown: true });
+    }],
+
+    // The agent waits for the person: answered when they press Done on this
+    // page, on timeout, or when the server stops. No tab is moved.
+    // body: {ask, frame?, consumer?, timeoutMs?}
+    ["POST", "/api/pages/:page/wait", async ({ req, res, params: { page: name } }) => {
+      const body = await readJSON(req);
+      requirePage(store, name);
+      requireElement(store, name, body.frame);
+      if (typeof body.ask !== "string" || !body.ask.trim() || body.ask.length > 500) throw new ApiError(400, "invalid_argument", "ask is the text to show the person (1-500 characters)");
+      const timeoutMs = body.timeoutMs ?? 0;
+      if (!(Number.isFinite(timeoutMs) && timeoutMs >= 0)) throw new ApiError(400, "invalid_argument", "timeoutMs must be a number of milliseconds, 0 for none");
+      if (body.consumer !== undefined && !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(body.consumer)) throw new ApiError(400, "invalid_argument", "bad consumer name");
+      waits.start(res, { page: name, frame: body.frame ?? null, ask: body.ask.trim(), consumer: body.consumer, timeoutMs });
+    }],
+    ["GET", "/api/waits", ({ res }) => json(res, 200, { waits: waits.list() })],
+    // A tab: the person pressed Done.
+    ["POST", "/api/waits/:id/done", ({ res, params: { id } }) => {
+      if (!waits.finish(id, "button")) throw new ApiError(404, "unknown_wait", "no one is waiting on that any more");
+      return json(res, 200, { ok: true });
     }],
   ];
 }

@@ -348,3 +348,48 @@ test("images: the server checks files and fileIds before asking a tab; the CLI c
   assert.equal(JSON.parse(r.stdout).error.code, "invalid_image");
   assert.equal(JSON.parse((await run(["status"], { env: other })).stdout).result.running, false, "no server was started");
 });
+
+test("wait: the ask is listed for tabs; Done answers with the person's changes; timeouts and a stopped command end it", async () => {
+  const { port, env } = await start();
+  const j = (r) => JSON.parse(r.stdout);
+  const sync = (elements) => raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { elements } });
+  await sync([rect("n1"), { id: "f1", type: "frame", x: -50, y: -50, width: 400, height: 300, version: 1, versionNonce: 1 }]);
+  await run(["changes", "board"], { env }); // the agent has read everything so far
+  const waits = async () => (await raw(port, { path: "/api/waits" })).json.waits;
+  const until = async (ok) => { for (let i = 0; i < 100 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 20)); };
+
+  // No tab shows the page: with --no-open it says where, and waits anyway.
+  const waiting = run(["wait", "board", "--ask", "Circle what's wrong", "--frame", "f1", "--no-open"], { env });
+  await until(async () => (await waits()).length === 1);
+  const [w] = await waits();
+  assert.deepEqual([w.page, w.frame, w.ask], ["board", "f1", "Circle what's wrong"]);
+  await sync([rect("n1", { version: 2, x: 40 })]);
+  assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).status, 200);
+  const r = await waiting;
+  assert.equal(r.code, 0, r.stdout);
+  assert.match(r.stderr, /board/);
+  const res = j(r).result;
+  assert.equal(res.done, "button");
+  assert.deepEqual(res.changes.map((c) => [c.id, c.op]), [["n1", "modified"]]);
+  assert.deepEqual(await waits(), []);
+  assert.deepEqual(j(await run(["changes", "board"], { env })).result.changes, [], "the wait moved the agent's cursor");
+  assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).json.error.code, "unknown_wait");
+
+  // A timeout answers with what there is.
+  const timed = j(await run(["wait", "board", "--ask", "Anything?", "--timeout", "0.005", "--no-open"], { env })).result;
+  assert.deepEqual([timed.done, timed.changes], ["timeout", []]);
+
+  // The agent's command stopped (the connection closed): the banner goes.
+  const req = http.request({ host: "127.0.0.1", port, method: "POST", path: "/api/pages/board/wait", headers: { host: `127.0.0.1:${port}`, ...H() } });
+  req.on("error", () => {});
+  req.end(JSON.stringify({ ask: "Going away" }));
+  await until(async () => (await waits()).length === 1);
+  req.destroy();
+  await until(async () => (await waits()).length === 0);
+  assert.deepEqual(await waits(), []);
+
+  // Usage and request errors.
+  assert.equal(j(await run(["wait", "board"], { env })).error.code, "missing_argument");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--timeout", "soon"], { env })).error.code, "invalid_argument");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--frame", "nope", "--no-open"], { env })).error.code, "unknown_element");
+});
