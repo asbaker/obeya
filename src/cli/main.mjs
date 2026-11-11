@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCli, UsageError } from "../lib/args.mjs";
 import { commandHelp, lookup, overviewHelp } from "../lib/commands.mjs";
-import { compact, outline } from "../lib/report.mjs";
+import { compact, lean, outline } from "../lib/report.mjs";
 import { lint, RULES } from "../lib/lint.mjs";
 import { sameDir, shotsDir } from "../lib/paths.mjs";
 import { findItem, instantiate, itemSize } from "../lib/library.mjs";
@@ -183,7 +183,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       return await client.call("GET", "/api/pages");
     case "get": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
-      let els = flags.full ? scene.elements : compact(scene.elements);
+      let els = flags.full ? lean(scene.elements) : compact(scene.elements);
       if (flags.frame) els = els.filter((e) => e.id === flags.frame || e.frame === flags.frame || e.frameId === flags.frame);
       return { page, rev, elements: els };
     }

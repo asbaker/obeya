@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brief, coalesce, compact, foldLabels, pointsAt, resolveChanges } from "../src/lib/report.mjs";
+import { brief, coalesce, compact, foldLabels, lean, pointsAt, resolveChanges } from "../src/lib/report.mjs";
 import { bounds, overlapScore } from "../src/lib/geometry.mjs";
 
 const note = (id, x, y, o = {}) => ({ id, type: "stickynote", x, y, width: 200, height: 200, version: 1, ...o });
@@ -264,4 +264,18 @@ test("brief: no times or per-entry revisions, source only for both, fields only 
     { op: "added", id: "n3", type: "stickynote", text: long }, // what the person wrote, in full
   ]);
   assert.equal(brief([{ op: "added", id: "a", type: "text", source: "agent", fields: [] }], { withSource: true })[0].source, "agent");
+});
+
+test("lean (get --full): live elements, no defaults or bookkeeping, coordinates to 0.1", () => {
+  const els = [
+    { id: "a", type: "rectangle", x: 10.123, y: 5, width: 100.06, height: 50, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "#a5d8ff", fillStyle: "solid", strokeWidth: 2, opacity: 100, groupIds: [], frameId: "f1", seed: 5, version: 3, versionNonce: 9, updated: 1, index: "a0", isDeleted: false, boundElements: [{ type: "text", id: "t" }] },
+    { id: "t", type: "text", x: 0, y: 0, width: 40, height: 20, text: "Hi", originalText: "Hi", fontSize: 16, fontFamily: 5, lineHeight: 1.25, containerId: "a", isDeleted: false },
+    { id: "gone", type: "rectangle", x: 0, y: 0, width: 1, height: 1, isDeleted: true },
+    { id: "l", type: "line", x: 0, y: 0, width: 10, height: 0, points: [[0, 0], [10.04, 0.333]], isDeleted: false },
+  ];
+  assert.deepEqual(lean(els), [
+    { id: "a", type: "rectangle", x: 10.1, y: 5, width: 100.1, height: 50, backgroundColor: "#a5d8ff", frameId: "f1", boundElements: [{ type: "text", id: "t" }] },
+    { id: "t", type: "text", x: 0, y: 0, width: 40, height: 20, text: "Hi", fontSize: 16, fontFamily: 5, containerId: "a" },
+    { id: "l", type: "line", x: 0, y: 0, width: 10, height: 0, points: [[0, 0], [10, 0.3]] },
+  ]);
 });

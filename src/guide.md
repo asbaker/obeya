@@ -75,13 +75,17 @@ Branch on `error.code`, not on the message. Exit codes: `0` ok, `1` error, `2` *
 
 ## Reading the canvas
 
+Read only as much as the task needs, cheapest first:
+
 ```bash
-obeya pages
-obeya describe roadmap --format text   # outline: frames, then elements with labels and IDs
-obeya get roadmap                      # compact JSON: id, type, x, y, w, h, text, frame, link, data
-obeya get roadmap --frame f-login --full
-obeya lint roadmap                     # layout problems: overlap, clipped-text, outside-frame, loose-arrow, near-miss, hidden
+obeya pages                              # the pages, their frames, when last edited
+obeya describe roadmap --format text     # what's there: frames, elements, labels, ids (start here)
+obeya get roadmap --frame f-login        # coordinates for one frame, to place or move things
+obeya get roadmap                        # every element's box: id, type, x, y, w, h, text, frame, link, data
+obeya lint roadmap                       # layout problems: overlap, clipped-text, outside-frame, loose-arrow, near-miss, hidden
 ```
+
+`describe` is about a third the size of `get` and is enough to find your way and to read what's written. Reach for `get` when you need positions; scope it with `--frame`.
 
 `lint` findings are `{rule, ids, frame, message}`; `--frame` and `--rule overlap,hidden` narrow them. Run it after a batch of patches and before showing the person a page: it costs a few dozen tokens, a screenshot costs a thousand or more.
 

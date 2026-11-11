@@ -57,10 +57,15 @@ export const COMMANDS = {
   },
   get: {
     usage: "get <page> [--frame <id>] [--full]",
-    summary: "Print a page's elements (compact by default, raw with --full)",
+    summary: "Print a page's elements: id, type, box, text, frame, link, data",
     page: true,
     flags: ["frame", "full"],
-    details: ["Compact form folds bound text into its container as `text`."],
+    details: [
+      "Compact: bound text folded into its container as `text`, coordinates rounded. Start with `describe` to find",
+      "your way around; use `get --frame <id>` when you need coordinates.",
+      "--full: Excalidraw's stored fields, for tools: live elements only, without default values or bookkeeping",
+      "(seed, version, …), coordinates to 0.1.",
+    ],
   },
   describe: {
     usage: "describe <page> [--format json|text]",

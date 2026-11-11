@@ -44,6 +44,36 @@ export function compact(elements) {
     });
 }
 
+// Excalidraw's defaults: a field with this value says nothing.
+const DEFAULTS = {
+  angle: 0, strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid",
+  roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, boundElements: null, link: null, locked: false,
+  containerId: null, autoResize: true, lineHeight: 1.25, baseFontSize: null, labelPosition: null, startBinding: null,
+  endBinding: null, elbowed: false, customData: undefined, isDeleted: false,
+};
+// Bookkeeping for the editor and the merge, not the drawing.
+const BOOKKEEPING = new Set(["seed", "version", "versionNonce", "updated", "index"]);
+const tenth = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : Array.isArray(v) ? v.map(tenth) : v);
+const GEOMETRY_KEYS = new Set(["x", "y", "width", "height", "points"]);
+
+/**
+ * `get --full`: the stored fields of live elements, minus deleted elements,
+ * values equal to Excalidraw's defaults, bookkeeping (seed, version, …) and an
+ * originalText equal to text; coordinates to 0.1.
+ */
+export function lean(elements) {
+  return elements.filter((e) => !e.isDeleted).map((e) => {
+    const r = {};
+    for (const [k, v] of Object.entries(e)) {
+      if (BOOKKEEPING.has(k) || (k === "originalText" && v === e.text)) continue;
+      if (k in DEFAULTS && JSON.stringify(DEFAULTS[k]) === JSON.stringify(v)) continue;
+      if (v === undefined) continue;
+      r[k] = GEOMETRY_KEYS.has(k) ? tenth(v) : v;
+    }
+    return r;
+  });
+}
+
 /** A plain-text outline of a page. */
 export function outline(page, rev, elements) {
   const els = compact(elements);
