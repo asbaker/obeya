@@ -185,8 +185,12 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       const frameAlive = (id) => id && (out.get(id) ?? byId.get(id))?.type === "frame" && !(out.get(id) ?? byId.get(id)).isDeleted;
       for (let el of converted) {
         const cur = byId.get(el.id), given = skelOf.get(el.id);
-        if (!cur) created.push(el.id);
-        else if (given && !cur.isDeleted) {
+        // A frame without children keeps the box it was given (the converter pads it).
+        if (el.type === "frame" && given && !given.children?.length) {
+          for (const k of ["x", "y", "width", "height"]) if (typeof given[k] === "number") el = { ...el, [k]: given[k] };
+        }
+        if (!cur || cur.isDeleted) created.push(el.id); // a deleted id brought back is new again
+        else if (given) {
           const kept = {};
           for (const k of KEPT_ON_RESKELETON) if (!(k in given) && k in cur) kept[k] = cur[k];
           if (!("frameId" in given) && !claimed.has(el.id) && frameAlive(cur.frameId)) kept.frameId = cur.frameId;
@@ -231,6 +235,13 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       for (let el of restoreElements(raw, scene, { refreshDimensions: true, repairBindings: false })) {
         const f = wantFrame.get(el.id);
         if (f !== undefined && el.frameId !== f && (f === null || isFrame(f))) el = { ...el, frameId: f };
+        // An edit that names a frame takes the label along, or the two come apart when the frame moves.
+        if (f !== undefined) {
+          const to = el.frameId ?? null;
+          for (const t of out.values()) {
+            if (t.containerId === el.id && !t.isDeleted && !wantFrame.has(t.id) && (t.frameId ?? null) !== to) out.set(t.id, { ...t, frameId: to, version: t.version + 1, versionNonce: nonce() });
+          }
+        }
         const cur = byId.get(el.id);
         if (cur?.boundElements?.length && !setsBound.has(el.id)) {
           const have = new Set((el.boundElements ?? []).map((b) => b.id));

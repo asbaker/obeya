@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brief, coalesce, compact, foldLabels, lean, pointsAt, resolveChanges } from "../src/lib/report.mjs";
+import { brief, coalesce, compact, foldLabels, layoutOutline, lean, outline, pointsAt, resolveChanges } from "../src/lib/report.mjs";
 import { bounds, overlapScore } from "../src/lib/geometry.mjs";
 
 const note = (id, x, y, o = {}) => ({ id, type: "stickynote", x, y, width: 200, height: 200, version: 1, ...o });
@@ -278,4 +278,31 @@ test("lean (get --full): live elements, no defaults or bookkeeping, coordinates 
     { id: "t", type: "text", x: 0, y: 0, width: 40, height: 20, text: "Hi", fontSize: 16, fontFamily: 5, containerId: "a" },
     { id: "l", type: "line", x: 0, y: 0, width: 10, height: 0, points: [[0, 0], [10, 0.3]] },
   ]);
+});
+
+test("describe --layout: rows in reading order, equal sizes and gaps, what sits inside what, arrows", () => {
+  const f = { id: "f", type: "frame", x: 0, y: 0, width: 1600, height: 900, name: "01 Flow" };
+  const step = (i) => ({ id: `s${i}`, type: "rectangle", x: 40 + i * 315, y: 150, width: 250, height: 110, frameId: "f" });
+  const els = [f, { id: "title", type: "text", x: 40, y: 30, width: 400, height: 40, text: "Flow", frameId: "f" },
+    ...[0, 1, 2].map(step), label("s0-l", "s0", "Start"),
+    { id: "a", type: "arrow", x: 290, y: 205, points: [[0, 0], [65, 0]], startBinding: { elementId: "s0" }, endBinding: { elementId: "s1" }, frameId: "f" },
+    { id: "col", type: "rectangle", x: 40, y: 400, width: 400, height: 400, frameId: "f" },
+    note("card", 60, 450, { frameId: "f" }), label("card-l", "card", "A card"),
+    note("loose", 5000, 5000)];
+  const text = layoutOutline("p", 3, els);
+  assert.match(text, /## 01 Flow \[f\] 1600×900 at 0,0/);
+  assert.match(text, /row 1 y30: title "Flow"/);
+  assert.match(text, /row 2 y150: s0 "Start" · s1 · s2 — 3× 250×110, gaps 65/);
+  assert.match(text, /in col:\n {4}row 1 y450: card "A card" 200×200/);
+  assert.match(text, /arrows: s0 → s1/);
+  assert.match(text, /## \(outside frames\)\nrow 1 y5000: loose/);
+  assert.doesNotMatch(layoutOutline("p", 3, els, { frame: "f" }), /outside frames/);
+  assert.match(layoutOutline("p", 3, [{ ...f }], { frame: "f" }), /\(empty\)/);
+});
+
+test("describe --frame: the outline of one frame", () => {
+  const els = [{ id: "f", type: "frame", x: 0, y: 0, width: 100, height: 100, name: "F" }, note("a", 0, 0, { frameId: "f" }), note("b", 500, 500)];
+  const text = outline("p", 1, els, { frame: "f" });
+  assert.match(text, /\[a\]/);
+  assert.doesNotMatch(text, /\[b\]/);
 });

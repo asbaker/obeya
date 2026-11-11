@@ -6,6 +6,7 @@ import { involving, lint } from "../../lib/lint.mjs";
 import { LayoutError, validateLayout } from "../../lib/layout.mjs";
 import { normalizePageName } from "../../lib/names.mjs";
 import { fileProblem } from "../../lib/images.mjs";
+import { applyDefaults, defaultsProblem } from "../../lib/defaults.mjs";
 
 const PATCH_KEYS = ["skeleton", "elements", "delete", "toBack", "toFront", "layout"];
 
@@ -13,13 +14,15 @@ function validatePatch(body) {
   const ok = body && typeof body === "object" && !Array.isArray(body);
   const arr = (k) => body[k] === undefined || Array.isArray(body[k]);
   if (!ok || !PATCH_KEYS.every(arr)) {
-    throw new ApiError(400, "invalid_patch", "a patch is {skeleton?: [], elements?: [], delete?: [], toBack?: [], toFront?: [], layout?: []}");
+    throw new ApiError(400, "invalid_patch", "a patch is {skeleton?: [], elements?: [], delete?: [], toBack?: [], toFront?: [], layout?: [], defaults?: {}}");
   }
-  const extra = Object.keys(body).filter((k) => !PATCH_KEYS.includes(k) && k !== "files");
+  const extra = Object.keys(body).filter((k) => !PATCH_KEYS.includes(k) && k !== "files" && k !== "defaults");
   if (extra.length) throw new ApiError(400, "invalid_patch", `unknown patch keys: ${extra.join(", ")}`);
   for (const e of [...(body.skeleton ?? []), ...(body.elements ?? [])]) {
     if (!e || typeof e !== "object") throw new ApiError(400, "invalid_patch", "patch entries must be objects");
   }
+  const bad = defaultsProblem(body.defaults);
+  if (bad) throw new ApiError(400, "invalid_patch", bad);
   for (const e of body.elements ?? []) {
     if (typeof e.id !== "string" || !e.id) throw new ApiError(400, "invalid_patch", "every entry in `elements` needs an `id`");
   }
@@ -96,6 +99,11 @@ export function pageRoutes({ store, tabs, pages, waits }) {
       const createdPage = !store.exists(name);
       store.load(name);
       store.revive(name);
+      // The page's base style for new skeleton elements; the editor never sees `defaults`.
+      if (body.defaults) {
+        body.skeleton = applyDefaults(body.skeleton, body.defaults, new Set(store.elements(name).map((e) => e.id)));
+        delete body.defaults;
+      }
       // Every image needs its file: in this patch, or already on the page.
       const have = { ...(store.load(name).scene.files ?? {}), ...(body.files ?? {}) };
       const missing = [...(body.skeleton ?? []), ...(body.elements ?? [])].filter((e) => e.fileId && !have[e.fileId]).map((e) => e.id ?? e.fileId);

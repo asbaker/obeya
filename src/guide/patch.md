@@ -25,11 +25,21 @@ Sticky notes in a frame, a labelled box, and an arrow bound to both:
 ]}
 ```
 
+## Defaults: the page's base style
+
+```json
+{"defaults": {"rectangle": {"backgroundColor": "#f8f9fa", "fillStyle": "solid", "roundness": {"type": 3}},
+              "label": {"fontSize": 16, "textAlign": "left"}},
+ "skeleton": [{"type": "rectangle", "id": "s1", "x": 40, "y": 150, "width": 250, "height": 110, "label": {"text": "Start"}}]}
+```
+
+Keys are element types, `label` (labels) and `*` (everything). An element's own fields win, then its type's, then `*`. They apply to new elements only: re-applying a skeleton to reword a label keeps its style. Override them wherever the content asks for something different; they're a base, not a limit.
+
 Edits and deletes: `{"elements": [{"id": "n-email", "x": 40, "y": 220}, {"id": "n-sso", "customData": {"status": "done"}}], "delete": ["a-sso-api"]}`
 
 ## Layout directives
 
-Let the tool do the arithmetic. Applied in order, in the same undo step; things move with their group, frames with their children.
+Let the tool do the arithmetic: don't compute coordinates by hand. A guessed position becomes a fix-up patch (and an arrow given `x: 0, y: 0` is drawn in the frame's corner). Applied in order, in the same undo step; things move with their group, frames with their children.
 
 - `{"place": "card-9", "in": "col-done", "end": true}`: the next free spot in a frame or shape (below what's there with `end`), lined up with similar elements, brought to the front. Error `no_room` if it doesn't fit.
 - `{"align": "left", "ids": ["a", "b"], "to": "c"}`: `left|right|top|bottom|centre-x|centre-y`; without `to`, to their combined box.
@@ -47,8 +57,25 @@ Let the tool do the arithmetic. Applied in order, in the same undo step; things 
 ## What the editor changes
 
 - Frames follow position, as when the person drops something: a new element that lies wholly inside a frame joins it, and an edit that moves an element into a frame (or wholly out of its frame) updates its `frameId`. Give `frameId` (or `null`) to say otherwise.
-- A frame created with `children` is re-fitted around them: its `x`, `y`, `width`, `height` are not kept. For an exact artboard, follow up with an `elements` edit that sets them.
+- A frame created with `children` is re-fitted around them: its `x`, `y`, `width`, `height` are not kept. A frame created without `children` keeps its box, and the elements inside it join by position: the easy way to an exact artboard.
 - Arrows are re-routed between their bound shapes.
 - Read positions back with `get` instead of assuming them.
 
-For big pages, write a small script that generates the patch JSON and pipe it in: it's shorter than the JSON and easy to re-run.
+## Generate big patches
+
+More than ~10 elements, or anything repeated (rows, tables, steps): write a short script that prints the patch, and pipe it in. It's 20–70% shorter than the JSON it prints, and you can edit and re-run it.
+
+```js
+// page.mjs: node page.mjs | obeya patch <page> --file -
+const S = [];
+const box = (id, x, y, text) => S.push({ type: "rectangle", id, x, y, width: 250, height: 110, label: { text } });
+["Start", "Build", "Ship"].forEach((t, i) => box(`s${i}`, 0, 0, t));
+S.push({ type: "frame", id: "f1", x: 0, y: 0, width: 1600, height: 900, name: "01 Flow" });
+console.log(JSON.stringify({
+  defaults: { rectangle: { backgroundColor: "#f8f9fa", fillStyle: "solid" } },
+  skeleton: S,
+  layout: [{ grid: ["s0", "s1", "s2"], columns: 3, gap: 60, at: [40, 150] }],
+}));
+```
+
+Keep generated ids stable (`s0`, `s1`, …) so a re-run updates what's there instead of adding copies.

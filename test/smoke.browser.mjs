@@ -1487,6 +1487,11 @@ test("frames by position: a new element inside a frame joins it, an edit moves i
   let f = await frameOf();
   const label = (await cli(["get", "framepos", "--full"])).json.result.elements.find((e) => e.containerId === "box");
   assert.deepEqual([f.box, label.frameId, f.half, f.free, f.mine], ["fa", "fa", null, null, null], "inside joins, sticking out or outside doesn't, frameId: null is respected");
+  // A deleted element brought back by a new skeleton with the same id is new again: it joins too.
+  await patch({ delete: ["half"] });
+  r = await patch({ skeleton: [{ type: "rectangle", id: "half", x: 300, y: 300, width: 200, height: 100 }] });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await frameOf()).half, "fa", "a re-created element joins by position");
   // An edit moves it into B, then out of every frame.
   await patch({ elements: [{ id: "box", x: 1040, y: 60 }] });
   f = await frameOf();
@@ -1494,10 +1499,50 @@ test("frames by position: a new element inside a frame joins it, an edit moves i
   await patch({ elements: [{ id: "box", x: 400, y: 800 }] });
   f = await frameOf();
   assert.equal(f.box, null);
-  // An edit that says its frame wins over position.
+  // An edit that says its frame wins over position, and the label goes with its shape.
+  await patch({ skeleton: [{ type: "rectangle", id: "free", x: 40, y: 800, width: 200, height: 100, label: { text: "Free" } }] });
   await patch({ elements: [{ id: "free", frameId: "fb" }] });
   f = await frameOf();
   assert.equal(f.free, "fb");
+  const freeLabel = (await cli(["get", "framepos", "--full"])).json.result.elements.find((e) => e.containerId === "free");
+  assert.equal(freeLabel.frameId, "fb", "the label follows its shape into the frame");
   assert.equal((await cli(["lint", "framepos", "--rule", "outside-frame,overlap"])).json.result.findings.filter((x) => x.ids.includes("box")).length, 0);
+  await A.close();
+});
+
+test("an empty frame keeps the box it was given; defaults give new elements the page's base style", { skip }, async () => {
+  const opened = await cli(["open", "defaults", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "defaults", "--file", "-"], { stdin: JSON.stringify(p) });
+  let r = await patch({
+    defaults: { rectangle: { backgroundColor: "#d3f9d8", fillStyle: "hachure" }, label: { fontSize: 14 } },
+    skeleton: [
+      { type: "frame", id: "art", x: 0, y: 0, width: 1600, height: 900, name: "01 Artboard" },
+      { type: "rectangle", id: "a", x: 40, y: 40, width: 200, height: 100, label: { text: "Base style" } },
+      { type: "rectangle", id: "b", x: 300, y: 40, width: 200, height: 100, backgroundColor: "#ffc9c9", label: { text: "Its own fill", fontSize: 20 } },
+    ],
+  });
+  assert.equal(r.code, 0, r.stdout);
+  let els = (await cli(["get", "defaults", "--full"])).json.result.elements;
+  const art = els.find((e) => e.id === "art");
+  assert.deepEqual([art.x, art.y, art.width, art.height], [0, 0, 1600, 900], "the frame's box as given");
+  const byId = (id) => els.find((e) => e.id === id), labelOf = (id) => els.find((e) => e.containerId === id);
+  assert.deepEqual([byId("a").backgroundColor, byId("a").fillStyle, labelOf("a").fontSize], ["#d3f9d8", "hachure", 14]);
+  assert.deepEqual([byId("b").backgroundColor, labelOf("b").fontSize], ["#ffc9c9", 20], "an element's own fields win");
+  assert.equal(byId("a").frameId, "art", "joined the frame by position");
+  // Re-applying a skeleton with defaults doesn't restyle what's there.
+  r = await patch({ defaults: { rectangle: { backgroundColor: "#a5d8ff" } }, skeleton: [{ type: "rectangle", id: "a", x: 40, y: 40, width: 200, height: 100, label: { text: "Reworded" } }] });
+  assert.equal(r.code, 0, r.stdout);
+  els = (await cli(["get", "defaults", "--full"])).json.result.elements;
+  assert.equal(byId("a").backgroundColor, "#d3f9d8");
+  // Bad defaults are refused before anything changes.
+  r = await patch({ defaults: { rectangle: "solid" }, skeleton: [] });
+  assert.equal(r.json.error.code, "invalid_patch");
   await A.close();
 });

@@ -14,7 +14,7 @@ import { parseCli, UsageError } from "../lib/args.mjs";
 import { commandHelp, lookup, overviewHelp } from "../lib/commands.mjs";
 import { errorBody } from "../lib/hints.mjs";
 import { guide } from "./guide.mjs";
-import { compact, lean, outline } from "../lib/report.mjs";
+import { compact, layoutOutline, lean, outline } from "../lib/report.mjs";
 import { lint, RULES } from "../lib/lint.mjs";
 import { sameDir, shotsDir } from "../lib/paths.mjs";
 import { findItem, instantiate, itemSize } from "../lib/library.mjs";
@@ -195,12 +195,13 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     }
     case "describe": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
-      const text = outline(page, rev, scene.elements);
+      if (flags.frame && !scene.elements.some((e) => e.id === flags.frame && !e.isDeleted)) throw new CliError("unknown_element", `no element "${flags.frame}" on page "${page}"`);
+      const text = (flags.layout ? layoutOutline : outline)(page, rev, scene.elements, { frame: flags.frame });
       if (flags.format === "text") {
         print(text);
         return undefined;
       }
-      return { page, rev, outline: text };
+      return flags.layout ? { page, rev, layout: text } : { page, rev, outline: text };
     }
     case "lint": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);

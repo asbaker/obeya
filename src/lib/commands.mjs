@@ -1,6 +1,7 @@
 // The command table. It drives argument validation and every help screen, so
 // the help text can't drift from what the parser accepts.
 import { normalizePageName, validPageName } from "./names.mjs";
+import { RULES } from "./lint.mjs";
 
 export const DEFAULT_PORT = 4747;
 export const DEFAULT_DIR = "obeya";
@@ -63,11 +64,14 @@ export const COMMANDS = {
     ],
   },
   describe: {
-    usage: "describe <page> [--format json|text]",
+    usage: "describe <page> [--frame <id>] [--layout] [--format json|text]",
     summary: "A plain-text outline: frames, then their elements with labels, IDs, links and customData",
     page: true,
-    flags: ["format"],
-    details: ["--format text prints the outline without the JSON envelope."],
+    flags: ["format", "frame", "layout"],
+    details: [
+      "--layout: each frame as rows in reading order (sizes, gaps, what sits inside what, arrows), to check an arrangement without a screenshot.",
+      "--frame <id>: one frame. --format text prints without the JSON envelope ({page, rev, outline} or {page, rev, layout}).",
+    ],
     validate(plan, bad) {
       if (plan.flags.format !== undefined && !["json", "text"].includes(plan.flags.format)) throw bad('--format must be "json" or "text"');
     },
@@ -79,17 +83,18 @@ export const COMMANDS = {
     flags: ["frame", "rule"],
     details: [
       "Prints {page, rev, findings: [{rule, ids, frame, message}]}. Rules: overlap, clipped-text, outside-frame,",
-      "loose-arrow, near-miss, hidden; --rule keeps only those. Changes nothing.",
+      "loose-arrow, misrouted-arrow, near-miss, hidden, unframed, stray, empty-frame, crowded-frame, small-text, contrast;",
+      "--rule keeps only those. Changes nothing.",
     ],
     validate(plan, bad) {
-      const known = ["overlap", "clipped-text", "outside-frame", "loose-arrow", "near-miss", "hidden"];
+      const known = RULES;
       const unknown = (plan.flags.rule ?? "").split(",").filter((r) => r && !known.includes(r));
       if (unknown.length) throw bad(`unknown rule(s): ${unknown.join(", ")}; rules are ${known.join(", ")}`);
     },
   },
   patch: {
     usage: "patch <page> --file <path|->",
-    summary: "Apply {skeleton?, elements?, delete?, toBack?, toFront?, layout?} through the live editor",
+    summary: "Apply {skeleton?, elements?, delete?, toBack?, toFront?, layout?, defaults?} through the live editor",
     page: true,
     flags: ["file"],
     required: ["file"],
@@ -329,6 +334,7 @@ export const OPTION_TYPES = {
   timeout: { type: "string" },
   rule: { type: "string" },
   full: { type: "boolean" },
+  layout: { type: "boolean" },
   format: { type: "string" },
   file: { type: "string" },
   since: { type: "string" },

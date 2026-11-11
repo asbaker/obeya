@@ -28,7 +28,8 @@ The server starts itself when needed and stops after 12 idle hours; a stopped se
 obeya pages                            # pages, frame counts, last edit
 obeya describe <page> --format text    # frames, elements, labels, ids: start here
 obeya get <page> --frame <id>          # boxes and coordinates, to place or move things
-obeya lint <page>                      # overlap, clipped-text, outside-frame, loose-arrow, near-miss, hidden
+obeya describe <page> --layout --frame <id>   # rows in reading order: check an arrangement as text
+obeya lint <page>                      # overlaps, clipped text, unframed, misrouted arrows, contrast, …
 ```
 
 `describe` is a third the size of `get`; use `get` only for positions.
@@ -37,6 +38,8 @@ obeya lint <page>                      # overlap, clipped-text, outside-frame, l
 
 `obeya patch <page> --file -` with JSON on stdin: `skeleton` creates, `elements` edits by `id`, `delete`, `toBack`/`toFront`, `layout` places things for you. **Run `obeya --skill patch` before your first patch**: shapes, examples, layout, and what the editor adjusts.
 
+- **Don't compute coordinates**: let `layout` place things (`place` in a frame, `align`, `distribute`, `grid`, `stack`).
+- **Over ~10 elements, or repetitive**: generate the patch with a short script; set base style once with `defaults` (`--skill patch`).
 - Text goes inside shapes as a `label`; bind arrows with `start`/`end`; give a composite object one shared `groupIds`.
 - Read positions back after a patch; don't assume them. Fix the response's `warnings` in a follow-up patch.
 
@@ -50,8 +53,8 @@ obeya lint <page>                      # overlap, clipped-text, outside-frame, l
 ## Check your work
 
 1. Fix each patch's `warnings`.
-2. After a batch of patches, `obeya lint <page>`: a few dozen tokens, against a thousand or more for a screenshot.
-3. Take **one** screenshot per round, before you say it's done, scoped to what changed: `obeya shot <page> --around <ids>` (a few elements, plus what's connected), `--frame <id>` (a frame you built), or the page (a new page). Read the PNG. Never a second, wider shot of the same change: the person will mark what's wrong.
+2. After a batch, `obeya lint <page>` (and `describe --layout --frame <id>` for a frame you arranged): far cheaper than a screenshot.
+3. Screenshot only **a new page or a frame you built**, once, scoped to it (`obeya shot <page> --frame <id>`, or the page), and read the PNG. After edits to an existing page, stop at step 2: the person has it open and will mark what's wrong.
 
 ## Topics: `obeya --skill <topic>`
 

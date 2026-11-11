@@ -75,7 +75,7 @@ export function lean(elements) {
 }
 
 /** A plain-text outline of a page. */
-export function outline(page, rev, elements) {
+export function outline(page, rev, elements, { frame } = {}) {
   const els = compact(elements);
   const frames = els.filter((e) => e.type === "frame");
   const lines = [`page ${page} · rev ${rev} · ${els.length} elements`];
@@ -88,10 +88,83 @@ export function outline(page, rev, elements) {
     return parts.join(" ");
   };
   for (const f of [...frames, { id: null, text: "(outside frames)" }]) {
+    if (frame && f.id !== frame) continue;
     const inside = els.filter((e) => e.type !== "frame" && (e.frame ?? null) === f.id);
     if (!inside.length && f.id === null) continue;
     lines.push("", `## ${f.text || "frame"}${f.id ? ` [${f.id}]` : ""}${f.link ? ` → ${f.link}` : ""}`);
     for (const e of inside) lines.push(line(e));
+  }
+  return lines.join("\n");
+}
+
+// describe --layout: each frame as rows in reading order, so an agent can check
+// the arrangement it meant without a screenshot. Objects inside another (cards
+// in a column) are listed under it; arrows as "a → b" between what they join.
+const ROW_OVERLAP = 0.5; // share of the smaller height two boxes must share to be in one row
+const SAME = 2; // px: sizes and gaps this close count as equal
+const short = (t, n = 28) => { const s = (t ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
+
+function rowsOf(items, box) {
+  const rows = [];
+  for (const e of [...items].sort((a, b) => box(a).y1 - box(b).y1 || box(a).x1 - box(b).x1)) {
+    const B = box(e);
+    const row = rows.find((r) => Math.min(r.y2, B.y2) - Math.max(r.y1, B.y1) >= ROW_OVERLAP * Math.min(r.y2 - r.y1, B.y2 - B.y1));
+    if (row) { row.items.push(e); row.y1 = Math.min(row.y1, B.y1); row.y2 = Math.max(row.y2, B.y2); }
+    else rows.push({ y1: B.y1, y2: B.y2, items: [e] });
+  }
+  for (const r of rows) r.items.sort((a, b) => box(a).x1 - box(b).x1);
+  return rows.sort((a, b) => a.y1 - b.y1);
+}
+
+export function layoutOutline(page, rev, elements, { frame } = {}) {
+  const live = elements.filter((e) => !e.isDeleted);
+  const labels = labelsByContainer(live);
+  const text = (e) => (e.type === "text" ? e.originalText ?? e.text : labels.get(e.id)) ?? e.name ?? "";
+  const B = new Map(live.map((e) => [e.id, bounds(e)]));
+  const box = (e) => B.get(e.id);
+  const r = Math.round;
+  const frames = live.filter((e) => e.type === "frame" || e.type === "magicframe");
+  const objects = live.filter((e) => !(e.type === "text" && e.containerId) && e.type !== "frame" && e.type !== "magicframe");
+  const shapes = objects.filter((e) => e.type !== "arrow" && e.type !== "line");
+  const arrows = objects.filter((e) => e.type === "arrow" && (e.startBinding?.elementId || e.endBinding?.elementId));
+  const area = (e) => (box(e).x2 - box(e).x1) * (box(e).y2 - box(e).y1);
+  const holds = (a, b) => a !== b && box(a).x1 <= box(b).x1 + 1 && box(a).y1 <= box(b).y1 + 1 && box(a).x2 >= box(b).x2 - 1 && box(a).y2 >= box(b).y2 - 1 && area(a) > area(b);
+  const item = (e) => { const t = short(text(e)); return t ? `${e.id} "${t}"` : e.id; };
+  const size = (e) => `${r(box(e).x2 - box(e).x1)}×${r(box(e).y2 - box(e).y1)}`;
+  const lines = [`page ${page} · rev ${rev} · layout`];
+
+  const describeRows = (items, indent) => {
+    const out = [];
+    rowsOf(items, box).forEach((row, i) => {
+      const its = row.items;
+      let line = `${indent}row ${i + 1} y${r(row.y1)}: ${its.map(item).join(" · ")}`;
+      if (its.length >= 3 && its.every((e) => Math.abs(box(e).x2 - box(e).x1 - (box(its[0]).x2 - box(its[0]).x1)) <= SAME && Math.abs(box(e).y2 - box(e).y1 - (box(its[0]).y2 - box(its[0]).y1)) <= SAME)) {
+        const gaps = its.slice(1).map((e, k) => r(box(e).x1 - box(its[k]).x2));
+        line += ` — ${its.length}× ${size(its[0])}, gaps ${gaps.every((g) => Math.abs(g - gaps[0]) <= SAME) ? gaps[0] : gaps.join("/")}`;
+      } else if (its.length === 1) line += ` ${size(its[0])}`;
+      out.push(line);
+      for (const e of its) {
+        const kids = items.length ? shapesIn(e) : [];
+        if (kids.length) out.push(`${indent}  in ${e.id}:`, ...describeRows(kids, `${indent}    `));
+      }
+    });
+    return out;
+  };
+  // The direct children of a container: inside it, and not inside another child.
+  const shapesIn = (c) => { const inC = shapes.filter((e) => holds(c, e) && (e.frameId ?? null) === (c.frameId ?? null)); return inC.filter((e) => !inC.some((o) => holds(o, e))); };
+
+  const sections = [...frames.map((f) => [f, shapes.filter((e) => e.frameId === f.id)]), [null, shapes.filter((e) => !e.frameId || !frames.some((f) => f.id === e.frameId))]];
+  for (const [f, mine] of sections) {
+    if (frame && f?.id !== frame) continue;
+    if (!f && !mine.length) continue;
+    const top = mine.filter((e) => !mine.some((o) => holds(o, e)));
+    lines.push("", f ? `## ${f.name ?? "frame"} [${f.id}] ${size(f)} at ${r(box(f).x1)},${r(box(f).y1)}` : "## (outside frames)");
+    if (!top.length) { lines.push("(empty)"); continue; }
+    lines.push(...describeRows(top, ""));
+    const ids = new Set(mine.map((e) => e.id));
+    const joins = arrows.filter((a) => ids.has(a.startBinding?.elementId) || ids.has(a.endBinding?.elementId))
+      .map((a) => `${a.startBinding?.elementId ?? "·"} → ${a.endBinding?.elementId ?? "·"}`);
+    if (joins.length) lines.push(`arrows: ${joins.join(", ")}`);
   }
   return lines.join("\n");
 }

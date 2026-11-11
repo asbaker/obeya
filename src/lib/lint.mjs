@@ -3,7 +3,7 @@
 import { bounds } from "./geometry.mjs";
 import { labelsByContainer, ref } from "./report.mjs";
 
-export const RULES = ["overlap", "clipped-text", "outside-frame", "loose-arrow", "near-miss", "hidden"];
+export const RULES = ["overlap", "clipped-text", "outside-frame", "loose-arrow", "misrouted-arrow", "near-miss", "hidden", "unframed", "stray", "empty-frame", "crowded-frame", "small-text", "contrast"];
 
 const SHAPES = new Set(["rectangle", "diamond", "ellipse", "stickynote", "text", "image", "embeddable", "iframe"]);
 const BINDABLE = new Set(["rectangle", "diamond", "ellipse", "stickynote", "text", "image", "embeddable", "iframe", "frame"]);
@@ -13,6 +13,13 @@ const TOL = 1; // px: rounding in the editor
 const LABEL_TOL = 2; // px: a label's position after its shape is resized
 const NEAR_MISS_PX = 4; // edges this close but not equal look like a mistake
 const LOOSE_PX = 12; // an unbound arrow end this close to a shape looks attached
+const MISROUTED_PX = 40; // a bound arrow end farther than this from its shape is drawn somewhere else
+const STRAY_PX = 800; // something outside frames this far from everything else looks lost
+const CROWDED = 0.8; // share of a frame covered by its innermost objects
+const SCREEN = [1920, 1080]; // a frame presented to fit this screen
+const MIN_TEXT_PX = 9; // text smaller than this on that screen is hard to read
+const MIN_CONTRAST = 3; // WCAG's minimum for large text
+const SLIDE_RATIO = [1.2, 2.4]; // frames this wide for their height look like slides
 
 const w = (b) => b.x2 - b.x1;
 const h = (b) => b.y2 - b.y1;
@@ -23,6 +30,21 @@ const overlapBox = (a, b) => ({ x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y
 const sharesGroup = (a, b) => (a.groupIds ?? []).some((g) => (b.groupIds ?? []).includes(g));
 const filled = (e) => FILLABLE.has(e.type) && (e.type === "image" || (e.backgroundColor && e.backgroundColor !== "transparent")) && (e.opacity ?? 100) > 50;
 const contains = (b, [x, y], pad = 0) => x >= b.x1 - pad && x <= b.x2 + pad && y >= b.y1 - pad && y <= b.y2 + pad;
+
+// Colour contrast (WCAG): relative luminance of a #rgb / #rrggbb colour, or null.
+function luminance(c) {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
+  if (!m) return null;
+  const hex = m[1].length === 3 ? [...m[1]].map((d) => d + d).join("") : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+export function contrast(fg, bg) {
+  const [a, b] = [luminance(fg), luminance(bg)];
+  if (a === null || b === null) return null;
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+const gap = (a, b) => Math.hypot(Math.max(0, a.x1 - b.x2, b.x1 - a.x2), Math.max(0, a.y1 - b.y2, b.y1 - a.y2));
 
 /**
  * @param {any[]} elements  a page's elements in stacking order (bottom first)
@@ -145,6 +167,91 @@ export function lint(elements, { frame, rules = RULES } = {}) {
       const E = box.get(e.id);
       const cover = objects.find((s) => s !== e && filled(s) && order.get(s.id) > order.get(e.id) && !sharesGroup(s, e) && inside(E, box.get(s.id), TOL));
       if (cover) add("hidden", [e, cover], `${name(e)} is under ${name(cover)}, which is filled and drawn above it; bring it to the front (toFront, or a stack layout)`);
+    }
+  }
+
+  if (on.has("unframed")) {
+    // Lying wholly inside a frame's area without belonging to it: it won't move,
+    // clip or export with the frame. (The editor adds what the person drops there.)
+    const fs = live.filter((e) => FRAMES.has(e.type));
+    for (const e of objects) {
+      const E = box.get(e.id);
+      let at = null;
+      for (const f of fs) if (inside(E, box.get(f.id))) at = f;
+      if (at && (e.frameId ?? null) !== at.id) add("unframed", [e, at], `${name(e)} lies inside ${name(at)} but isn't in it${e.frameId ? ` (it's in [${e.frameId}])` : ""}, so it won't move or export with the frame; set its frameId to "${at.id}"`);
+    }
+    // A label in another frame than its shape: the two come apart when the frame moves.
+    for (const t of live) {
+      const c = t.type === "text" && t.containerId && byId.get(t.containerId);
+      if (c && (t.frameId ?? null) !== (c.frameId ?? null)) add("unframed", [c, t], `the label of ${name(c)} is in ${t.frameId ? `[${t.frameId}]` : "no frame"} but its shape is in ${c.frameId ? `[${c.frameId}]` : "no frame"}; re-apply the shape's skeleton to fix both`);
+    }
+  }
+
+  if (on.has("misrouted-arrow")) {
+    for (const a of live) {
+      if (a.type !== "arrow" || !a.points?.length) continue;
+      for (const [which, [px, py], binding] of [["start", a.points[0], a.startBinding], ["end", a.points.at(-1), a.endBinding]]) {
+        const t = binding?.elementId && byId.get(binding.elementId);
+        if (!t) continue;
+        const d = gap({ x1: a.x + px, y1: a.y + py, x2: a.x + px, y2: a.y + py }, box.get(t.id));
+        if (d > MISROUTED_PX) add("misrouted-arrow", [a, t], `the ${which} of ${name(a)} is bound to ${name(t)} but drawn ${Math.round(d)} px away from it; re-apply the arrow's skeleton with start/end, or move it`);
+      }
+    }
+  }
+
+  const frames = live.filter((e) => FRAMES.has(e.type));
+  if (on.has("stray")) {
+    const free = objects.filter((e) => !e.frameId && e.type !== "arrow" && e.type !== "line");
+    const others = [...objects, ...frames];
+    if (others.length > 2) {
+      for (const e of free) {
+        const E = box.get(e.id);
+        const near = others.some((o) => o !== e && !sharesGroup(o, e) && o.containerId !== e.id && gap(E, box.get(o.id)) <= STRAY_PX);
+        if (!near) add("stray", [e], `${name(e)} is more than ${STRAY_PX} px from everything else on the page`);
+      }
+    }
+  }
+
+  const inFrame = (f) => objects.filter((e) => e.frameId === f.id);
+  if (on.has("empty-frame")) {
+    for (const f of frames) if (!live.some((e) => e.frameId === f.id)) add("empty-frame", [f], `${name(f)} is empty`);
+  }
+
+  if (on.has("crowded-frame")) {
+    for (const f of frames) {
+      const F = box.get(f.id), kids = inFrame(f).filter((e) => e.type !== "arrow" && e.type !== "line");
+      // The innermost objects: a column holding cards counts as its cards.
+      const leaves = kids.filter((e) => !kids.some((k) => k !== e && inside(box.get(k.id), box.get(e.id)) && w(box.get(k.id)) * h(box.get(k.id)) < w(box.get(e.id)) * h(box.get(e.id))));
+      const covered = leaves.reduce((sum, e) => { const o = overlapBox(box.get(e.id), F); return sum + Math.max(0, w(o)) * Math.max(0, h(o)); }, 0);
+      const share = covered / Math.max(1, w(F) * h(F));
+      if (share > CROWDED) add("crowded-frame", [f], `${name(f)} is ${Math.round(share * 100)}% covered; leave some room, or make it bigger`);
+    }
+  }
+
+  if (on.has("small-text")) {
+    for (const f of frames) {
+      const F = box.get(f.id), ratio = w(F) / Math.max(1, h(F));
+      if (ratio < SLIDE_RATIO[0] || ratio > SLIDE_RATIO[1]) continue; // a board, not a slide
+      const scale = Math.min(SCREEN[0] / w(F), SCREEN[1] / h(F));
+      for (const t of live) {
+        if (t.type !== "text" || (t.frameId !== f.id && byId.get(t.containerId)?.frameId !== f.id)) continue;
+        const px = (t.fontSize ?? 20) * scale;
+        if (px < MIN_TEXT_PX) add("small-text", [t.containerId ? byId.get(t.containerId) : t], `${name(t.containerId ? byId.get(t.containerId) : t)} is ${Math.round(px * 10) / 10} px tall when ${name(f)} is presented on a ${SCREEN.join("×")} screen; use fontSize ${Math.ceil(MIN_TEXT_PX / scale)} or more`);
+      }
+    }
+  }
+
+  if (on.has("contrast")) {
+    for (const t of live) {
+      if (t.type !== "text" || (t.opacity ?? 100) <= 50) continue;
+      const T = box.get(t.id);
+      const c = t.containerId && byId.get(t.containerId);
+      // What's behind it: its container's fill, else the topmost filled shape under it, else the canvas.
+      let under = c && filled(c) && c.type !== "image" ? c : null;
+      if (!under && !c) under = objects.filter((s) => s !== t && filled(s) && s.type !== "image" && order.get(s.id) < order.get(t.id) && inside(T, box.get(s.id), TOL)).sort((a, b) => order.get(b.id) - order.get(a.id))[0] ?? null;
+      const ratio = contrast(t.strokeColor ?? "#1e1e1e", under?.backgroundColor ?? "#ffffff");
+      const subject = c || t;
+      if (ratio !== null && ratio < MIN_CONTRAST) add("contrast", under ? [subject, under].filter((e, i, a) => a.indexOf(e) === i) : [subject], `${name(subject)}: text ${t.strokeColor} on ${under?.backgroundColor ?? "white"} has contrast ${Math.floor(ratio * 10) / 10}:1; make it at least ${MIN_CONTRAST}:1`);
     }
   }
 
