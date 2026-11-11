@@ -63,7 +63,13 @@ export function parseCli(argv, env = {}, cwd = process.cwd()) {
     skill: Boolean(flags.skill),
     version: Boolean(flags.version),
   };
-  if (plan.skill || plan.version || !command) return plan;
+  if (plan.skill) {
+    // `--skill [topic]`: the guide's core, or one topic of it.
+    if (rest.length) throw new UsageError("invalid_argument", "--skill takes one topic: obeya --skill [<topic>|all]");
+    plan.topic = command ?? null;
+    return plan;
+  }
+  if (plan.version || !command) return plan;
 
   let name = command;
   let spec = COMMANDS[command];

@@ -1,9 +1,9 @@
 // obeya CLI: the agent's side of the canvas. Talks only to the local
 // server, and starts it in the background when it isn't running.
 //
-// Every command prints one JSON envelope on stdout:
-//   {"id": "cli:<command>", "result": {...}}
-//   {"id": "cli:<command>", "error": {"code": "...", "message": "...", ...}}
+// Every command prints one compact JSON envelope on stdout:
+//   {"result": {...}}
+//   {"error": {"code": "...", "message": "...", "hint": "...", ...}}
 // Exit codes: 0 ok, 1 error, 2 the person needs to act (open the link).
 
 
@@ -12,6 +12,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCli, UsageError } from "../lib/args.mjs";
 import { commandHelp, lookup, overviewHelp } from "../lib/commands.mjs";
+import { errorBody } from "../lib/hints.mjs";
+import { guide } from "./guide.mjs";
 import { compact, lean, outline } from "../lib/report.mjs";
 import { lint, RULES } from "../lib/lint.mjs";
 import { sameDir, shotsDir } from "../lib/paths.mjs";
@@ -27,7 +29,6 @@ import { lib, libSummary, notifyLibraries, runLibrary } from "./library.mjs";
 export { CliError };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = path.join(here, "..", "guide.md");
 const VERSION = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8")).version;
 
 /** Errors whose fix is for the person to do something. */
@@ -53,13 +54,18 @@ export async function run(argv, ctx = {}) {
     plan = parseCli(argv, env, cwd);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
-    io.out.push(JSON.stringify({ error: { code: err.code, message: err.message, ...(err.command ? { usage: `obeya ${lookup(err.command).usage}` } : {}) } }));
+    io.out.push(JSON.stringify({ error: errorBody(err.code, err.message, err.command ? { usage: `obeya ${lookup(err.command).usage}` } : {}) }));
     errLine(err.command ? commandHelp(err.command) : "Run `obeya --help` for the list of commands.");
     return done(1);
   }
 
   if (plan.skill) {
-    io.out.push(fs.readFileSync(SKILL, "utf8").trimEnd());
+    const text = guide(plan.topic);
+    if (text === null) {
+      io.out.push(JSON.stringify({ error: errorBody("unknown_topic", `no topic "${plan.topic}"`, { topics: guide.topics() }) }));
+      return done(1);
+    }
+    io.out.push(text);
     return done(0);
   }
   if (plan.version) {
@@ -87,10 +93,10 @@ export async function run(argv, ctx = {}) {
     return done(0);
   } catch (err) {
     if (!(err instanceof CliError)) {
-      io.out.push(JSON.stringify({ error: { code: "internal", message: String(err?.message || err) } }));
+      io.out.push(JSON.stringify({ error: errorBody("internal", String(err?.message || err)) }));
       return done(1);
     }
-    io.out.push(JSON.stringify({ error: { code: err.code, message: err.message, ...err.extra } }));
+    io.out.push(JSON.stringify({ error: errorBody(err.code, err.message, err.extra) }));
     if (err.extra?.url) note(`open this link in your browser: ${err.extra.url}`);
     return done(PERSON_ACTS.has(err.code) ? 2 : 1);
   }

@@ -73,6 +73,9 @@ test("values are validated", () => {
 test("help, skill and version short-circuit validation", () => {
   assert.equal(parse([]).command, null);
   assert.equal(parse(["--skill"]).skill, true);
+  assert.equal(parse(["--skill"]).topic, null);
+  assert.equal(parse(["--skill", "patch"]).topic, "patch");
+  assert.throws(() => parse(["--skill", "patch", "wait"]), /one topic/);
   assert.equal(parse(["-V"]).version, true);
   const h = parse(["patch", "--help"]);
   assert.equal(h.help, true);
