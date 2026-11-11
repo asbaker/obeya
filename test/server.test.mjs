@@ -84,7 +84,7 @@ test("user edits are logged, persisted, and read with --since last", async () =>
   // A sync claiming to be the agent is still the person's edit.
   await raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { source: "agent", elements: [rect("n2", { version: 2, x: 320 })] } });
   const moved = JSON.parse((await run(["changes", "board", "--since", "last", "--source", "user"], { env })).stdout).result.changes;
-  assert.deepEqual(moved.map((c) => [c.id, c.op, c.source, c.moved]), [["n2", "modified", "user", { from: [300, 0], to: [320, 0] }]]);
+  assert.deepEqual(moved.map((c) => [c.id, c.op, c.moved]), [["n2", "modified", { from: [300, 0], to: [320, 0] }]]);
 
   // Restart: log and cursor survive, revisions continue.
   assert.equal((await run(["stop"], { env })).code, 0);
@@ -144,6 +144,20 @@ test("idle timeout 0 never stops", async () => {
   servers.push(env);
   const r = await run(["serve", "--idle-timeout", "0"], { env });
   assert.equal(JSON.parse(r.stdout).result.idleTimeout, 0);
+});
+
+test("changes defaults: the person's edits since your last read, brief entries; --source all adds `source` (agent edits: smoke test)", async () => {
+  const { port, env } = await start();
+  const j = (r) => JSON.parse(r.stdout);
+  const sync = (elements) => raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { elements } });
+  await sync([rect("n1")]);
+  const first = j(await run(["changes", "board"], { env })).result;
+  assert.deepEqual(first.changes, [{ op: "added", id: "n1", type: "rectangle" }], "no rev, at, fields or source");
+  assert.deepEqual(j(await run(["changes", "board"], { env })).result.changes, [], "the cursor moved");
+  const all = j(await run(["changes", "board", "--since", "0", "--source", "all"], { env })).result.changes;
+  assert.deepEqual(all.map((c) => c.source), ["user"]);
+  assert.deepEqual(j(await run(["changes", "board", "--since", "0", "--source", "agent"], { env })).result.changes, []);
+  assert.equal(j(await run(["changes", "board", "--source", "everyone"], { env })).error.code, "invalid_argument");
 });
 
 test("bands: set, list, delete, and moves across them in `changes`", async () => {
@@ -261,7 +275,7 @@ test("a pages folder from before the rename keeps its change log: the server mov
   servers.push(env);
   const r = JSON.parse((await run(["changes", "b", "--no-open"], { env })).stdout);
   assert.equal(r.result.rev, 7, "the old log was read");
-  assert.equal(r.result.changes[0].source, "user");
+  assert.equal(r.result.changes[0].id, "r1");
   assert.ok(fs.existsSync(path.join(pages, ".obeya", "b.changes.jsonl")));
   assert.ok(!fs.existsSync(path.join(pages, ".excalidraw-local")));
 });

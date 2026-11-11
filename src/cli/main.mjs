@@ -208,7 +208,9 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
     case "changes": {
       // POST: reading with "last" moves the consumer's read cursor.
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/changes`, { since: flags.since ?? "0", consumer: plan.consumer, ...(flags.source ? { source: flags.source } : {}) });
+      // By default: what the person did since this consumer's last read. The agent knows its own edits.
+      const source = flags.source ?? "user";
+      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/changes`, { since: flags.since ?? "last", consumer: plan.consumer, brief: true, ...(source === "all" ? {} : { source }) });
     }
     case "shot": {
       // The person's tab renders if one is open; otherwise a headless Chrome;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coalesce, compact, foldLabels, pointsAt, resolveChanges } from "../src/lib/report.mjs";
+import { brief, coalesce, compact, foldLabels, pointsAt, resolveChanges } from "../src/lib/report.mjs";
 import { bounds, overlapScore } from "../src/lib/geometry.mjs";
 
 const note = (id, x, y, o = {}) => ({ id, type: "stickynote", x, y, width: 200, height: 200, version: 1, ...o });
@@ -236,4 +236,30 @@ test("a note added, relabeled and deleted again leaves nothing, label folding in
     entry({ op: "deleted", id: "tc", type: "text", containerId: "c" }),
   ], els);
   assert.deepEqual(out, []);
+});
+
+test("a note dropped in a column doesn't point at the column; a dot on a card still points at the card", () => {
+  const column = { id: "col", type: "rectangle", x: -40, y: -40, width: 800, height: 2000 };
+  const els = [column, ...row];
+  const dropped = note("new", 100, 600); // inside the column, clear of the notes
+  assert.deepEqual(pointsAt(dropped, els), []);
+  const dot = { id: "d", type: "ellipse", x: 20, y: 160, width: 14, height: 14 };
+  assert.deepEqual(pointsAt(dot, els), ["n1"]);
+  // An empty frame-like box: nothing else in it, so a note inside it still points at it.
+  assert.deepEqual(pointsAt(note("x", 2100, 100), [{ id: "box", type: "rectangle", x: 2000, y: 0, width: 1000, height: 1000 }]), ["box"]);
+});
+
+test("brief: no times or per-entry revisions, source only for both, fields only when not implied", () => {
+  const long = "x".repeat(100);
+  const out = brief([
+    { rev: 3, at: "t", source: "user", op: "modified", id: "n1", type: "stickynote", fields: ["x", "y", "backgroundColor"], moved: { from: [0, 0], to: [5, 5] }, text: long, frame: "f1" },
+    { rev: 4, at: "t", source: "user", op: "added", id: "e", type: "ellipse", fields: [], pointsAt: [{ id: "n1", type: "stickynote" }] },
+    { rev: 5, at: "t", source: "user", op: "relabeled", id: "n2", type: "stickynote", fields: ["text"], text: "Hi" },
+  ]);
+  assert.deepEqual(out, [
+    { op: "modified", id: "n1", type: "stickynote", text: "x".repeat(79) + "…", fields: ["backgroundColor"], frame: "f1", moved: { from: [0, 0], to: [5, 5] } },
+    { op: "added", id: "e", type: "ellipse", pointsAt: [{ id: "n1", type: "stickynote" }] },
+    { op: "relabeled", id: "n2", type: "stickynote", text: "Hi" },
+  ]);
+  assert.equal(brief([{ op: "added", id: "a", type: "text", source: "agent", fields: [] }], { withSource: true })[0].source, "agent");
 });

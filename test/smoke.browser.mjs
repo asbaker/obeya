@@ -243,7 +243,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   });
 
   // 3. `changes --source user` reports exactly those four, with the right pointsAt.
-  const changes = async () => (await cli(["changes", "board", "--source", "user"])).json.result.changes;
+  const changes = async () => (await cli(["changes", "board", "--since", "0"])).json.result.changes; // the person's, by default
   try {
     await until(async () => (await changes()).length >= 4, { what: "four user changes" });
   } catch (err) {
@@ -272,7 +272,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.deepEqual(sticky.pointsAt?.map((p) => p.id), ["n3"]);
   assert.equal(pen.op, "added");
   assert.deepEqual(pen.pointsAt?.map((p) => p.id), ["n4"]);
-  for (const c of all) assert.equal(c.source, "user");
+  for (const c of all) assert.equal(c.source, undefined, "brief: no source when only the person's are asked for");
 
   // --since last: everything once, then nothing.
   assert.equal((await cli(["changes", "board", "--since", "last", "--source", "user"])).json.result.changes.length, 4);
@@ -389,7 +389,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.ok(Math.abs(live.find((e) => e.id === "n1").y - (n1.y + 300)) <= 3);
   assert.ok(live.some((e) => e.type === "ellipse") && live.some((e) => e.type === "freedraw"));
   assert.ok(live.some((e) => e.type === "text" && e.text === "Needs SSO"));
-  const restarted = await cli(["changes", "board", "--source", "user"]); // starts the server again
+  const restarted = await cli(["changes", "board", "--since", "0"]); // starts the server again
   assert.equal(restarted.json.result.changes.length, 4);
   assert.equal(fs.readdirSync(path.join(S.tmp, "canvas")).filter((f) => !f.startsWith(".")).join(","), "board.excalidraw");
   // The open tab survives the restart: it reconnects by itself, no new link.
@@ -471,7 +471,7 @@ test("concurrency: the person drags while agent patches land; nothing is misattr
 
   // Let the last sync land, then compare.
   await sleep(1200);
-  const all = (await cli(["changes", "board", "--since", String(start)])).json.result.changes;
+  const all = (await cli(["changes", "board", "--since", String(start), "--source", "all"])).json.result.changes;
   const user = all.filter((c) => c.source === "user");
   const byAgent = all.filter((c) => c.source === "agent");
   assert.ok(user.length >= 1, "the person's drags were recorded");
@@ -1002,7 +1002,8 @@ test("late layout: the editor's change to a patched element right after the patc
   await A.goto(u.href);
   await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
   const T = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
-  const last = async (id) => (await cli(["changes", "board"])).json.result.changes.filter((c) => c.id === id).at(-1);
+  // The full log (revisions, sources), not the brief one agents read.
+  const last = async (id) => (await (await fetch(`http://127.0.0.1:${S.port}/api/pages/board/changes?since=0`)).json()).changes.filter((c) => c.id === id).at(-1);
   const points = [[0, 0], [7, 6], [14, -1], [0, 0]];
   const r = await cli(["patch", "board", "--file", "-"], { stdin: JSON.stringify({ elements: [{ id: "tick", type: "line", x: 40, y: 940, points }] }) });
   assert.equal(r.code, 0, r.stdout);
@@ -1298,7 +1299,7 @@ test("folders: the picker by folder, New page into a folder, moving, a link into
   await until(async () => (await T("page")) === "project-b/kickoff", { what: "the tab follows the move" });
   assert.ok(onDisk("project-b/kickoff.excalidraw") && !onDisk("project-c"), "moved; the empty folder is gone");
   assert.ok(onDisk(".obeya/project-b/kickoff.changes.jsonl"), "the change log moved too");
-  assert.equal((await cli(["changes", "project-b/kickoff"])).json.result.changes[0].id, "k1");
+  assert.equal((await cli(["changes", "project-b/kickoff", "--since", "0", "--source", "all"])).json.result.changes[0].id, "k1");
 
   // A link into a folder opens that page.
   const link = new URL(u.href);

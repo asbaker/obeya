@@ -113,7 +113,7 @@ The prototype uses components from [ecommerce mobile ui](https://github.com/exca
 Your agent drives obeya through a CLI that prints JSON. When you circle two cards and ask a question, this is what it sees:
 
 ```bash
-$ obeya changes signup-flow --since last --source user
+$ obeya changes signup-flow
 { "id": "cli:changes", "result": { "changes": [
   { "op": "added", "type": "ellipse", "pointsAt": [
       { "text": "Enter the code we emailed" }, { "text": "Confirm your phone" } ] },
@@ -123,7 +123,7 @@ $ obeya changes signup-flow --since last --source user
 | Command | What it does |
 |---|---|
 | `obeya patch <page>` | Add, change or delete elements through the live editor |
-| `obeya changes <page>` | What changed, and what each annotation points at |
+| `obeya changes <page>` | What the person changed since the agent last looked, and what each annotation points at |
 | `obeya describe <page>` | A plain-text outline of the page |
 | `obeya shot <page>` | A PNG, so the agent can look at the page |
 | `obeya export <page>` | PNG, SVG, PDF or an HTML slideshow |

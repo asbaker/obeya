@@ -105,12 +105,14 @@ export const COMMANDS = {
     ],
   },
   changes: {
-    usage: "changes <page> [--since <rev>|last] [--source user|agent] [--consumer <name>]",
-    summary: "What changed, with labels folded and annotations resolved (pointsAt)",
+    usage: "changes <page> [--since last|<rev>] [--source user|agent|all] [--consumer <name>]",
+    summary: "What the person changed since your last read, with labels folded and annotations resolved (pointsAt)",
     page: true,
     flags: ["since", "source", "consumer"],
     details: [
-      "--since last returns entries after this consumer's previous `--since last` read, then moves its cursor.",
+      "Defaults: --since last --source user. --since last returns entries after this consumer's",
+      "previous `--since last` read, then moves its cursor; --since <rev> reads from a revision and moves nothing.",
+      "--source agent: your own edits (and other agents'); --source all: both, each entry with its `source`.",
       "--consumer defaults to $OBEYA_CONSUMER or \"default\".",
     ],
   },

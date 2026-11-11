@@ -44,7 +44,7 @@ test("--skill prints a self-contained SKILL.md with frontmatter and no local pat
   assert.equal(r.code, 0);
   const m = /^---\nname: obeya\ndescription: "(.+)"\n---\n/.exec(r.stdout);
   assert.ok(m, "frontmatter with name and description");
-  for (const topic of ["--no-open", "exit", "skeleton", "stickynote", "frame", "arrow", "--since last", "pointsAt", "shot", "Present", "export", "Never write `.excalidraw` files"]) {
+  for (const topic of ["--no-open", "exit", "skeleton", "stickynote", "frame", "arrow", "--since <rev>", "pointsAt", "shot", "Present", "export", "Never write `.excalidraw` files"]) {
     assert.ok(r.stdout.includes(topic), `skill mentions ${topic}`);
   }
   assert.doesNotMatch(r.stdout, /\/Users\/|\/home\/|[A-Z]:\\\\|@[a-z0-9-]+\.[a-z]{2,}/i);

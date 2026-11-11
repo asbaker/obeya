@@ -1,7 +1,7 @@
 // /api/pages: the page list, reading a page, the person's edits (sync), agent
 // patches, the change log, rename, bands, and pointing the person's view.
 import { ApiError, json, readJSON, requireElement, requirePage } from "../http.mjs";
-import { resolveChanges } from "../../lib/report.mjs";
+import { brief, resolveChanges } from "../../lib/report.mjs";
 import { involving, lint } from "../../lib/lint.mjs";
 import { LayoutError, validateLayout } from "../../lib/layout.mjs";
 import { normalizePageName } from "../../lib/names.mjs";
@@ -122,7 +122,9 @@ export function pageRoutes({ store, tabs, pages }) {
       if (since === "last" && req.method === "GET") throw new ApiError(405, "invalid_argument", "since=last moves a read cursor: use POST");
       if (since !== "last" && !(Number.isInteger(since) && since >= 0)) throw new ApiError(400, "invalid_argument", "since must be a revision or \"last\"");
       const r = store.changes(name, { since, source: q.source || undefined, consumer: q.consumer || "default" });
-      return json(res, 200, { page: name, rev: r.rev, since: r.since, changes: resolveChanges(r.entries, store.elements(name), store.bands(name)) });
+      const changes = resolveChanges(r.entries, store.elements(name), store.bands(name));
+      // brief: what an agent reads (the CLI asks for it); the full entries otherwise.
+      return json(res, 200, { page: name, rev: r.rev, since: r.since, changes: q.brief ? brief(changes, { withSource: !q.source }) : changes });
     }],
 
     // Create an empty page now (the New page dialog): saved before anything is drawn.

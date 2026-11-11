@@ -124,8 +124,8 @@ export function parseCli(argv, env = {}, cwd = process.cwd()) {
   if (flags.since !== undefined && flags.since !== "last" && !/^\d+$/.test(flags.since)) {
     throw new UsageError("invalid_argument", `--since must be a revision number or "last"`, name);
   }
-  if (flags.source !== undefined && !["user", "agent"].includes(flags.source)) {
-    throw new UsageError("invalid_argument", `--source must be "user" or "agent"`, name);
+  if (flags.source !== undefined && !["user", "agent", "all"].includes(flags.source)) {
+    throw new UsageError("invalid_argument", `--source must be "user", "agent" or "all"`, name);
   }
   if (flags.scale !== undefined && !(Number(flags.scale) > 0 && Number(flags.scale) <= 8)) {
     throw new UsageError("invalid_argument", `--scale must be a number in (0, 8]`, name);

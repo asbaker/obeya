@@ -70,6 +70,9 @@ export const ANNOTATION_TYPES = new Set(["ellipse", "freedraw", "arrow", "rectan
 const NEVER_TARGETS = new Set(["freedraw", "arrow", "line", "frame", "magicframe", "selection"]);
 export const POINTS_AT_THRESHOLD = 0.3;
 const MAX_TARGETS = 5;
+// Annotations that can sit inside an area rather than point at it, and how much bigger the area must be.
+const SITS_IN = new Set(["stickynote", "rectangle", "ellipse"]);
+const AREA_RATIO = 10;
 
 /**
  * Which elements does annotation `anno` cover or point to? Returns element ids,
@@ -82,6 +85,16 @@ export function pointsAt(anno, elements) {
   const candidates = elements.filter(
     (e) => !e.isDeleted && e.id !== anno.id && !NEVER_TARGETS.has(e.type) && !(e.type === "text" && e.containerId),
   );
+  // A note or shape dropped inside an area that holds other notes (a column, a
+  // lane) sits there; it doesn't point at it. A dot on a card still points at the card.
+  const A = bounds(anno);
+  const inside = (B, a) => B.x1 <= a.x1 && B.y1 <= a.y1 && B.x2 >= a.x2 && B.y2 >= a.y2;
+  const notes = candidates.filter((e) => e.type === "stickynote").map((e) => [e.id, bounds(e)]);
+  const sitsIn = (e) => {
+    if (!SITS_IN.has(anno.type)) return false;
+    const B = bounds(e);
+    return inside(B, A) && area(B) >= AREA_RATIO * area(A) && notes.some(([id, n]) => id !== e.id && inside(B, n));
+  };
   if (anno.type === "arrow" || anno.type === "line") {
     const bound = [anno.endBinding?.elementId, anno.startBinding?.elementId].filter(Boolean);
     if (bound.length) return [...new Set(bound)];
@@ -95,6 +108,7 @@ export function pointsAt(anno, elements) {
     return [];
   }
   return candidates
+    .filter((e) => !sitsIn(e))
     .map((e) => [e.id, overlapScore(anno, e)])
     .filter(([, s]) => s > POINTS_AT_THRESHOLD)
     .sort((a, b) => b[1] - a[1])
@@ -250,6 +264,28 @@ export function resolveChanges(entries, elements, bands = []) {
       const ids = pointsAt(el, live);
       if (ids.length) r.pointsAt = ids.map((id) => ref(byId.get(id), labels));
     }
+    return r;
+  });
+}
+
+const TEXT_MAX = 80;
+
+/**
+ * What an agent reads: no timestamps or revisions per entry, `source` only when
+ * both are asked for, `fields` only for what `moved`, `frameChange` and `text`
+ * don't already say, and text cut to 80 characters.
+ */
+export function brief(changes, { withSource = false } = {}) {
+  return changes.map((c) => {
+    const r = { op: c.op, id: c.id, type: c.type };
+    if (withSource) r.source = c.source;
+    if (c.text) r.text = c.text.length > TEXT_MAX ? c.text.slice(0, TEXT_MAX - 1) + "…" : c.text;
+    if (c.op === "modified") {
+      const said = new Set([...(c.moved ? ["x", "y"] : []), ...(c.frameChange ? ["frameId"] : [])]);
+      const fields = (c.fields ?? []).filter((f) => !said.has(f));
+      if (fields.length) r.fields = fields;
+    }
+    for (const k of ["frame", "moved", "frameChange", "crossed", "pointsAt", "deletedSince"]) if (c[k] !== undefined) r[k] = c[k];
     return r;
   });
 }
