@@ -46,7 +46,6 @@ export async function run(argv, ctx = {}) {
   // Notices stream as they happen when the caller wants them (the bin does).
   const errLine = ctx.onStderr ?? ((line) => io.err.push(line));
   const note = (msg) => errLine(`obeya: ${msg}`);
-  let id = "cli";
   const done = (code) => ({ stdout: io.out.join("\n"), stderr: io.err.join("\n"), code });
 
   let plan;
@@ -54,8 +53,7 @@ export async function run(argv, ctx = {}) {
     plan = parseCli(argv, env, cwd);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
-    id = err.command ? `cli:${err.command.replace(" ", ":")}` : "cli";
-    io.out.push(JSON.stringify({ id, error: { code: err.code, message: err.message, ...(err.command ? { usage: `obeya ${lookup(err.command).usage}` } : {}) } }));
+    io.out.push(JSON.stringify({ error: { code: err.code, message: err.message, ...(err.command ? { usage: `obeya ${lookup(err.command).usage}` } : {}) } }));
     errLine(err.command ? commandHelp(err.command) : "Run `obeya --help` for the list of commands.");
     return done(1);
   }
@@ -81,18 +79,18 @@ export async function run(argv, ctx = {}) {
     return done(0);
   }
 
-  id = `cli:${plan.name.replace(" ", ":")}`;
+  // One compact JSON envelope: {result} or {error}. Agents read it; pretty-printing only costs them tokens.
   plan.env = env;
   try {
     const result = await execute(plan, { env, cwd, note, stdin: ctx.stdin ?? (() => fs.readFileSync(0, "utf8")), print: (s) => io.out.push(s) });
-    if (result !== undefined) io.out.push(JSON.stringify({ id, result }, null, 2));
+    if (result !== undefined) io.out.push(JSON.stringify({ result }));
     return done(0);
   } catch (err) {
     if (!(err instanceof CliError)) {
-      io.out.push(JSON.stringify({ id, error: { code: "internal", message: String(err?.message || err) } }, null, 2));
+      io.out.push(JSON.stringify({ error: { code: "internal", message: String(err?.message || err) } }));
       return done(1);
     }
-    io.out.push(JSON.stringify({ id, error: { code: err.code, message: err.message, ...err.extra } }, null, 2));
+    io.out.push(JSON.stringify({ error: { code: err.code, message: err.message, ...err.extra } }));
     if (err.extra?.url) note(`open this link in your browser: ${err.extra.url}`);
     return done(PERSON_ACTS.has(err.code) ? 2 : 1);
   }

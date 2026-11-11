@@ -191,7 +191,7 @@ test("cli: search, show (downloads), list, add, remove; nothing starts a server"
   const env = { ...process.env, ...envWith(), OBEYA_DIR: path.join(tmpDir(), "canvas"), OBEYA_PORT: "1" };
   const j = async (...a) => JSON.parse((await run(a, { env })).stdout);
   const s = await j("library", "search", "architecture");
-  assert.equal(s.id, "cli:library:search");
+  assert.ok(s.result, "an envelope with result");
   assert.deepEqual(s.result.results.map((r) => r.id), ["shapes.acme", "doodles"]);
   const show = await j("library", "show", "shapes.acme");
   assert.equal(show.result.downloaded, true);

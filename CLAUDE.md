@@ -19,7 +19,7 @@ A local-only shared Excalidraw canvas for a person and an AI agent.
 - No runtime dependencies. Node built-ins only; `playwright-core` is a dev dependency for the smoke test.
 - Privacy: never put local absolute paths, usernames, email addresses or other personal info in any repo file, including tests, docs and the skill text. Tests use temp dirs.
 - Port 4747 is the default and may be in use by a developer's own canvas: never stop it. Tests let the OS pick free ports (ephemeral range), so parallel test files can't race for one.
-- Every CLI command prints one JSON envelope (`{id, result}` or `{id, error: {code, message}}`). New errors get a stable `code`; document it in the skill (`src/guide.md`).
+- Every CLI command prints one compact JSON envelope (`{result}` or `{error: {code, message}}`), never pretty-printed: agents pay for every byte. New errors get a stable `code`; document it in the skill (`src/guide.md`).
 - Mutating commands never run with defaults because arguments are missing.
 - Tests never touch the internet: library tests use the local stand-in catalogue in `test/fixtures/catalogue` (`OBEYA_CATALOGUE_URL`) and a temp `OBEYA_CACHE`.
 - Moving the Excalidraw pin requires the smoke test to pass. Re-check the arrow-binding workaround in `src/page/arrows.mjs` when it moves.

@@ -28,11 +28,11 @@ Running a command with missing arguments prints its help and an error (`missing_
 
 ## Output, errors and IDs
 
-Every command prints one JSON envelope on stdout:
+Every command prints one JSON envelope on stdout, compact, on one line:
 
 ```json
-{"id": "cli:patch", "result": { … }}
-{"id": "cli:patch", "error": {"code": "no_canvas_open", "message": "…", "url": "…"}}
+{"result": { … }}
+{"error": {"code": "no_canvas_open", "message": "…", "url": "…"}}
 ```
 
 Branch on `error.code`, not on the message. Exit codes: `0` ok, `1` error, `2` **the person needs to act** (open the link in `error.url`).

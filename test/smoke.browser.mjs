@@ -168,7 +168,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   await S.page.goto(u.href);
   const patched = await patching;
   assert.equal(patched.code, 0, patched.stdout + patched.stderr);
-  assert.equal(patched.json.id, "cli:patch");
+  assert.equal(patched.json.id, undefined, "no id in the envelope");
   for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(patched.json.result.created.includes(id), `created ${id}`);
   assert.equal(patched.json.result.createdPage, true);
 

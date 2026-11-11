@@ -55,17 +55,18 @@ test("a mutating command with missing arguments prints help and does nothing", a
   const r = await run(["patch", "board"], { env, stdin: () => assert.fail("must not read stdin") });
   assert.equal(r.code, 1);
   const out = JSON.parse(r.stdout);
-  assert.equal(out.id, "cli:patch");
+  assert.equal(out.id, undefined);
   assert.equal(out.error.code, "missing_argument");
   assert.match(r.stderr, /Usage: obeya patch/);
   assert.ok(!fs.existsSync(path.join(dir, "canvas")), "no server started, no dir created");
 });
 
-test("envelope: id + result on success", async () => {
+test("envelope: {result} on success, one compact line", async () => {
   const { env } = await envFor();
   const r = await run(["status"], { env });
-  assert.deepEqual(Object.keys(JSON.parse(r.stdout)), ["id", "result"]);
-  assert.equal(JSON.parse(r.stdout).id, "cli:status");
+  assert.deepEqual(Object.keys(JSON.parse(r.stdout)), ["result"]);
+  assert.equal(r.stdout.includes("\n"), false, "compact: no pretty-printing");
+  assert.ok(JSON.parse(r.stdout).result);
   assert.equal(JSON.parse(r.stdout).result.running, false);
 });
 
@@ -147,7 +148,7 @@ test("rename: needs no tab; errors; reports links that still name the old page",
   fs.writeFileSync(path.join(dir, "canvas", "b.excalidraw"), page([]));
   const j = async (...a) => JSON.parse((await run(a, { env })).stdout);
   const r = await j("rename", "a", "c", "--no-open");
-  assert.equal(r.id, "cli:rename");
+  assert.ok(r.result);
   assert.deepEqual(r.result.staleLinks.map((l) => [l.page, l.id]), [["c", "go"]]);
   assert.deepEqual((await j("pages")).result.pages.map((p) => p.name), ["b", "c"]);
   assert.equal((await j("rename", "c", "b")).error.code, "page_exists");

@@ -164,7 +164,7 @@ test("bands: set, list, delete, and moves across them in `changes`", async () =>
   const { port, env } = await start();
   const j = (r) => JSON.parse(r.stdout);
   const set = j(await run(["band", "set", "board", "release", "--y", "400"], { env }));
-  assert.equal(set.id, "cli:band:set");
+  assert.ok(set.result);
   assert.deepEqual(set.result.band, { name: "release", axis: "y", from: 400, to: 400 });
   await run(["band", "set", "board", "lane", "--x", "500", "--to", "900"], { env });
   assert.deepEqual(j(await run(["band", "list", "board"], { env })).result.bands.map((b) => b.name), ["lane", "release"]);

@@ -114,7 +114,7 @@ Your agent drives obeya through a CLI that prints JSON. When you circle two card
 
 ```bash
 $ obeya changes signup-flow
-{ "id": "cli:changes", "result": { "changes": [
+{ "result": { "changes": [
   { "op": "added", "type": "ellipse", "pointsAt": [
       { "text": "Enter the code we emailed" }, { "text": "Confirm your phone" } ] },
   { "op": "added", "type": "stickynote", "text": "why two steps here?" } ] } }
