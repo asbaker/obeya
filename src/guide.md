@@ -195,7 +195,7 @@ By default `changes` returns **the person's** edits since **your** previous read
 - `--source agent`: your own edits (and any other agent's); `--source all`: both, each entry with its `source`.
 - `--consumer <name>`: a separate cursor, if several tools read the same page.
 
-Each entry has `op` (`added`, `modified`, `relabeled`, `deleted`, `restored`), `id`, `type`, `text` (the first 80 characters), and, where relevant:
+Each entry has `op` (`added`, `modified`, `relabeled`, `deleted`, `restored`), `id`, `type`, `text` (in full for what was added or reworded; otherwise the first 80 characters), and, where relevant:
 
 - `fields`: what else a `modified` changed (`backgroundColor`, `customData`, …);
 - `moved: {from: [x, y], to: [x, y]}`;

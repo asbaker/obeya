@@ -249,17 +249,19 @@ test("a note dropped in a column doesn't point at the column; a dot on a card st
   assert.deepEqual(pointsAt(note("x", 2100, 100), [{ id: "box", type: "rectangle", x: 2000, y: 0, width: 1000, height: 1000 }]), ["box"]);
 });
 
-test("brief: no times or per-entry revisions, source only for both, fields only when not implied", () => {
+test("brief: no times or per-entry revisions, source only for both, fields only when not implied, new text in full", () => {
   const long = "x".repeat(100);
   const out = brief([
     { rev: 3, at: "t", source: "user", op: "modified", id: "n1", type: "stickynote", fields: ["x", "y", "backgroundColor"], moved: { from: [0, 0], to: [5, 5] }, text: long, frame: "f1" },
     { rev: 4, at: "t", source: "user", op: "added", id: "e", type: "ellipse", fields: [], pointsAt: [{ id: "n1", type: "stickynote" }] },
     { rev: 5, at: "t", source: "user", op: "relabeled", id: "n2", type: "stickynote", fields: ["text"], text: "Hi" },
+    { rev: 6, at: "t", source: "user", op: "added", id: "n3", type: "stickynote", fields: [], text: long },
   ]);
   assert.deepEqual(out, [
     { op: "modified", id: "n1", type: "stickynote", text: "x".repeat(79) + "…", fields: ["backgroundColor"], frame: "f1", moved: { from: [0, 0], to: [5, 5] } },
     { op: "added", id: "e", type: "ellipse", pointsAt: [{ id: "n1", type: "stickynote" }] },
     { op: "relabeled", id: "n2", type: "stickynote", text: "Hi" },
+    { op: "added", id: "n3", type: "stickynote", text: long }, // what the person wrote, in full
   ]);
   assert.equal(brief([{ op: "added", id: "a", type: "text", source: "agent", fields: [] }], { withSource: true })[0].source, "agent");
 });

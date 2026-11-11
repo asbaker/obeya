@@ -273,13 +273,15 @@ const TEXT_MAX = 80;
 /**
  * What an agent reads: no timestamps or revisions per entry, `source` only when
  * both are asked for, `fields` only for what `moved`, `frameChange` and `text`
- * don't already say, and text cut to 80 characters.
+ * don't already say. Text added or reworded comes in full; otherwise it is cut
+ * to 80 characters, enough to name the element.
  */
 export function brief(changes, { withSource = false } = {}) {
   return changes.map((c) => {
     const r = { op: c.op, id: c.id, type: c.type };
     if (withSource) r.source = c.source;
-    if (c.text) r.text = c.text.length > TEXT_MAX ? c.text.slice(0, TEXT_MAX - 1) + "…" : c.text;
+    // New or reworded text is what the person wrote: in full. Otherwise it only names the element.
+    if (c.text) r.text = c.op === "added" || c.op === "relabeled" || c.text.length <= TEXT_MAX ? c.text : c.text.slice(0, TEXT_MAX - 1) + "…";
     if (c.op === "modified") {
       const said = new Set([...(c.moved ? ["x", "y"] : []), ...(c.frameChange ? ["frameId"] : [])]);
       const fields = (c.fields ?? []).filter((f) => !said.has(f));
