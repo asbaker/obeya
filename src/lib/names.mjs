@@ -92,3 +92,6 @@ export function nearestNames(name, names, n = 5) {
   };
   return names.map((s) => [s, score(s)]).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, n).map(([s]) => s);
 }
+
+/** A page's folder with each part cut to its first character ("project-a/research" → "p/r"), for a narrow label. */
+export const shortFolder = (name) => folderOf(name).split("/").filter(Boolean).map((p) => [...p][0]).join("/");

@@ -36,8 +36,9 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif;
 .xl-list { overflow-y: auto; padding: 0 12px 8px; }
 .xl-section { margin: 10px 8px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #868e96; }
 .xl-recent { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
-.xl-recent button { border: 1px solid #dee2e6; background: #f8f9fa; border-radius: 16px; padding: 4px 12px; font: inherit; cursor: pointer; }
-.xl-recent button:hover { background: #f1f0ff; border-color: #6965db; }
+.xl-recent a { border: 1px solid #dee2e6; background: #f8f9fa; border-radius: 16px; padding: 4px 12px; font: inherit; cursor: pointer; color: inherit; text-decoration: none; }
+.xl-recent a:hover { background: #f1f0ff; border-color: #6965db; }
+a.xl-row { color: inherit; text-decoration: none; }
 .xl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .xl-row.hl { background: #f1f0ff; }
 .xl-row .meta { color: #868e96; font-size: 12px; white-space: nowrap; }

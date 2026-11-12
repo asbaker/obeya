@@ -1542,3 +1542,57 @@ test("an empty frame keeps the box it was given; defaults give new elements the 
   assert.equal(r.json.error.code, "invalid_patch");
   await A.close();
 });
+
+test("navigation: Back and Forward move between pages; picker rows are links (new tab); long folders shrink in the pill", { skip }, async () => {
+  const dir = path.join(S.tmp, "canvas");
+  const empty = JSON.stringify({ type: "excalidraw", version: 2, elements: [], appState: {}, files: {} });
+  const deep = "a-rather-long-folder/another-long-folder/a-fairly-long-page-name";
+  for (const n of ["nav-a", "nav-b", deep]) {
+    fs.mkdirSync(path.dirname(path.join(dir, n)), { recursive: true });
+    fs.writeFileSync(path.join(dir, `${n}.excalidraw`), empty);
+  }
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const T = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
+  const onPage = (name, what) => until(async () => (await T("page")) === name && new URL(A.url()).searchParams.get("page") === name, { what });
+  const row = (name) => `[data-testid=picker-row][data-name="${name}"]`;
+
+  // A plain click on a picker row opens the page here.
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector(row("nav-a"));
+  assert.equal(await A.getAttribute(row("nav-a"), "href"), "?page=nav-a", "a real link");
+  await A.click(row("nav-a"));
+  await onPage("nav-a", "a click opens nav-a here");
+
+  // Cmd/Ctrl-click opens it in a new tab and leaves this one where it is.
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector(row("nav-b"));
+  const [other] = await Promise.all([S.context.waitForEvent("page"), A.click(row("nav-b"), { modifiers: ["ControlOrMeta"] })]);
+  await until(() => other.url().includes("page=nav-b"), { what: "the new tab opens nav-b" });
+  await other.close();
+  await A.keyboard.press("Escape");
+  assert.equal(await T("page"), "nav-a", "this tab stays");
+
+  // An agent's show is an entry too; then Back and Forward walk them.
+  assert.equal((await cli(["show", deep])).code, 0);
+  await onPage(deep, "show opens the deep page");
+  await A.goBack();
+  await onPage("nav-a", "Back: nav-a");
+  await A.goBack();
+  await onPage("board", "Back: board");
+  await A.goForward();
+  await onPage("nav-a", "Forward: nav-a");
+  await A.goForward();
+  await onPage(deep, "Forward: the deep page");
+
+  // The pill: the folders shrink to a character each before the page name is cut; the tooltip has it whole.
+  await until(async () => (await A.textContent("[data-testid=pill-folder]")) === "a / a / ", { what: "short folders in the pill" });
+  assert.equal(await A.textContent("[data-testid=pill-name]"), "a-fairly-long-page-name");
+  assert.match(await A.getAttribute("[data-testid=page-pill]", "title"), new RegExp(`^${deep} · `));
+  await A.close();
+});

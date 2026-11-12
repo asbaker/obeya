@@ -67,6 +67,15 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
     else return;
     ev.preventDefault();
   };
+  // Rows are links to their page, so the browser's own ways to open a link in a
+  // new tab work: right-click, Cmd/Ctrl-click, Shift-click, middle-click. A plain
+  // click opens the page here.
+  const href = (name) => `?page=${encodeURIComponent(name)}`;
+  const follow = (name) => (ev) => {
+    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // the browser's
+    ev.preventDefault();
+    go(name);
+  };
   const meta = (p) => `${p.frames} frame${p.frames === 1 ? "" : "s"} · ${edited(p.modified)}`;
   let i = -1;
   const row = (b) => {
@@ -76,9 +85,10 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
         h("button", { className: "xl-link xl-here", onClick: () => onNew(b.heading), "data-testid": "picker-new-here", title: `New page in ${b.heading}` }, "+ page here"));
     }
     const idx = ++i, p = byName.get(b.name);
-    return h("div", {
+    return h(b.create ? "div" : "a", {
       key: (b.create ? "+" : "") + b.name, className: "xl-row" + (idx === at ? " hl" : "") + (b.indent ? " indent" : ""), "data-testid": b.create ? "picker-create" : "picker-row",
-      "data-name": b.name, onMouseMove: () => idx !== at && setHl(idx), onClick: () => go(b.name, b.create),
+      "data-name": b.name, onMouseMove: () => idx !== at && setHl(idx),
+      ...(b.create ? { onClick: () => go(b.name, true) } : { href: href(b.name), title: b.name, onClick: follow(b.name) }),
     },
       b.create
         ? h("span", null, "+ New page ", h("b", null, baseName(b.name)))
@@ -98,7 +108,7 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
       h("div", { className: "xl-list" },
         recent.length ? h(React.Fragment, null,
           h("div", { className: "xl-section" }, "Recent"),
-          h("div", { className: "xl-recent" }, recent.map((n) => h("button", { key: n, onClick: () => go(n) }, n)))) : null,
+          h("div", { className: "xl-recent" }, recent.map((n) => h("a", { key: n, href: href(n), title: n, onClick: follow(n), "data-testid": "picker-recent" }, n)))) : null,
         h("div", { className: "xl-section" }, q ? "Matches" : "All pages · A–Z"),
         blocks.map(row),
         typed && !items.length ? h("div", { className: "xl-hint" }, `No page matches. ${NAME_RULE}`) : null,
