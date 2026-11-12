@@ -63,7 +63,7 @@ obeya lint <page>                      # overlaps, clipped text, unframed, misro
 - `wait`: asking the person to do something on a page, then getting their changes on Done
 - `library`: finding and inserting components and icons from the Excalidraw catalogue
 - `images`: putting local images and screenshots on a page
-- `prototype`: links between frames, clickable areas, presenting
+- `prototype`: links between frames and pages (always relative), clickable areas, presenting
 - `export`: SVG, PNG, HTML slide deck, PDF
 - `pages`: folders, renaming and moving pages
 - `server`: ports, tabs, starting and stopping, `--no-open`

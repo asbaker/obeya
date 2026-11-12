@@ -8,7 +8,7 @@ JSON
 ```
 
 - `skeleton`: create elements with Excalidraw's skeleton API; the editor does the layout (text wrapping, sticky-note sizing, arrow binding). Give every element your own `id`. Types: `rectangle`, `ellipse`, `diamond`, `text`, `arrow`, `line`, `frame`, `stickynote`, `image` (`--skill images`).
-- `elements`: partial edits merged onto existing elements by `id`: `x`, `y`, `backgroundColor`, `strokeColor`, `link`, `customData`, `name`. New elements need `skeleton`.
+- `elements`: partial edits merged onto existing elements by `id`: `x`, `y`, `backgroundColor`, `strokeColor`, `link`, `customData`, `name`. New elements need `skeleton`. A `link` to a page or element is relative: `?page=<page>&element=<id>`, never `http://127.0.0.1:<port>/…` (the port can change).
 - `delete`: ids; deleting a container deletes its label.
 - `toBack` / `toFront`: new elements land on top, so send backgrounds, bands and guide lines to the back.
 - The response is `{page, rev, createdPage, created, changed, warnings}`; `created` and `changed` are counts (labels and the editor's layout included). To see exactly what the editor did: `obeya changes <page> --source agent --since <rev before the patch>`.
