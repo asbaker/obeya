@@ -29,6 +29,7 @@ export const HINTS = {
   no_room: "make the area bigger or move something out; nothing was changed",
   invalid_image: "check the path; images are PNG, JPEG, GIF, WebP or SVG",
   image_too_large: "shrink the image under 4 MB, then retry",
+  invalid_mermaid: "fix the mermaid syntax the message names; nothing was changed",
 
   // the canvas tab
   canvas_outdated: "ask the person to reload the canvas tab, then retry; nothing was changed",

@@ -128,6 +128,7 @@ $ obeya changes signup-flow
 | `obeya describe <page>` | A plain-text outline of the page |
 | `obeya shot <page>` | A PNG, so the agent can look at the page |
 | `obeya export <page>` | PNG, SVG, PDF or an HTML slideshow |
+| `obeya mermaid <page>` | Draw a Mermaid diagram as editable elements; run it again to update it |
 | `obeya library` | Search, view and insert components from public libraries |
 
 - `obeya --skill` prints the guide for the installed version (a short core; `obeya --skill <topic>` for one topic, `obeya --skill all` for everything); the installed skill points at it.
@@ -140,7 +141,7 @@ $ obeya changes signup-flow
 - 🛡️ Other websites open in your browser can't reach it (it checks `Host`, `Origin` and `Sec-Fetch-Site`).
 - ⚠️ No login or token: other programs and users on the same machine can reach it, as with most local dev servers.
 - 🚫 No telemetry. Pages, screenshots and exports never leave your machine.
-- ⬇️ Downloads only: the pinned Excalidraw editor and fonts (from `esm.sh`), and component libraries you ask for.
+- ⬇️ Downloads only: the pinned Excalidraw editor, its Mermaid converter and fonts (from `esm.sh`), and component libraries you ask for. Your Mermaid text is converted in your browser.
 
 ## FAQ
 

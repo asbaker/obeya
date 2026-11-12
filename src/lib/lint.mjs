@@ -56,7 +56,7 @@ export const FIXES = {
   "near-miss": "an align layout (off: the edge or centre and by how many px)",
   hidden: "the first id is under the second, which is filled: toFront, or a stack layout",
   unframed: "set frameId to `into`; a label in another frame than its shape: re-apply the shape's skeleton",
-  stray: "move it near the rest, or into a frame",
+  stray: "move it (or its whole group) near the rest, or into a frame",
   "empty-frame": "fill it or delete it",
   "crowded-frame": "leave some room (covered: %), or make the frame bigger",
   "small-text": "fontSize `min` or more (px: its height when the frame is presented full screen)",
@@ -222,14 +222,19 @@ export function lint(elements, { frame, rules = RULES } = {}) {
 
   const frames = live.filter((e) => FRAMES.has(e.type));
   if (on.has("stray")) {
+    // A group is one object (a diagram, a card): judged by its box, reported once.
     const free = objects.filter((e) => !e.frameId && e.type !== "arrow" && e.type !== "line");
-    const others = [...objects, ...frames];
-    if (others.length > 2) {
-      for (const e of free) {
-        const E = box.get(e.id);
-        const near = others.some((o) => o !== e && !sharesGroup(o, e) && o.containerId !== e.id && gap(E, box.get(o.id)) <= STRAY_PX);
-        if (!near) add("stray", [e]);
-      }
+    const all = [...objects, ...frames];
+    const seen = new Set();
+    for (const e of free) {
+      const g = e.groupIds?.at(-1);
+      if (g && seen.has(g)) continue;
+      if (g) seen.add(g);
+      const members = g ? objects.filter((o) => o.groupIds?.includes(g)) : [e];
+      const E = members.map((m) => box.get(m.id)).reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
+      const others = all.filter((o) => !members.includes(o) && o.containerId !== e.id);
+      if (others.length < 2) continue; // next to nothing: nothing to be far from
+      if (!others.some((o) => gap(E, box.get(o.id)) <= STRAY_PX)) add("stray", [e], g ? { group: g } : {});
     }
   }
 

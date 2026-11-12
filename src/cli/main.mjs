@@ -21,6 +21,7 @@ import { compact, layoutOutline, lean, outline } from "../lib/report.mjs";
 import { fixes, lint, RULES } from "../lib/lint.mjs";
 import { sameDir, shotsDir } from "../lib/paths.mjs";
 import { findItem, instantiate } from "../lib/library.mjs";
+import { diagramElements, mermaidPatch, placement } from "../lib/mermaid.mjs";
 import { ensureLibrary } from "../lib/libcache.mjs";
 import { CliError, ensureBrowser, ensureServer, makeClient, openInBrowser, sleep } from "./client.mjs";
 import { resolvePort } from "./ports.mjs";
@@ -104,13 +105,16 @@ export async function run(argv, ctx = {}) {
   }
 }
 
-function readPatch(file, cwd, stdin) {
-  let text;
+function readText(file, cwd, stdin) {
   try {
-    text = file === "-" ? stdin() : fs.readFileSync(path.resolve(cwd, file), "utf8");
+    return file === "-" ? stdin() : fs.readFileSync(path.resolve(cwd, file), "utf8");
   } catch (err) {
     throw new CliError("invalid_argument", `cannot read --file ${file}: ${err.code || err.message}`);
   }
+}
+
+function readPatch(file, cwd, stdin) {
+  const text = readText(file, cwd, stdin);
   try {
     return JSON.parse(text);
   } catch {
@@ -135,6 +139,8 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
   // Read inputs before any side effect, so a bad patch never starts a server or opens a tab.
   // Images: each `src` (a local file) becomes a fileId plus the file.
   const patch = cmd === "patch" ? resolveImages(readPatch(flags.file, cwd, stdin), cwd) : null;
+  const mermaidText = cmd === "mermaid" ? readText(flags.file, cwd, stdin) : null;
+  if (mermaidText !== null && !mermaidText.trim()) throw new CliError("invalid_argument", `--file ${flags.file} is empty`);
   if (cmd.startsWith("library ") && cmd !== "library insert") return runLibrary(plan, client, note, env, cwd);
   // Download the library before opening anything, so a bad id fails fast.
   let libraryItem = null;
@@ -227,6 +233,25 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       // what the editor did beyond the patch is in `changes --source agent --since <rev>`.
       const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
       return { rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, changed: r.changed.length, warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}) };
+    }
+    case "mermaid": {
+      // Converted in a tab, then applied as patches: the earlier run's elements
+      // deleted, the new ones created with the same ids, where the earlier run was.
+      const { scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}?ifMissing=empty`);
+      if (flags.frame && !scene.elements.some((e) => e.id === flags.frame && e.type === "frame" && !e.isDeleted)) {
+        throw new CliError("unknown_element", `no frame "${flags.frame}" on page "${page}"`);
+      }
+      const converted = await client.call("POST", "/api/mermaid", { text: mermaidText });
+      const where = placement(scene.elements, { prefix: flags.id, frame: flags.frame ?? null });
+      const at = flags.at ? flags.at.split(",").map(Number) : where.at;
+      const { skeleton, files, image } = mermaidPatch(converted, { prefix: flags.id, at, frame: where.frame });
+      const old = diagramElements(scene.elements, flags.id).filter((e) => !(e.type === "text" && e.containerId)).map((e) => e.id);
+      if (old.length) await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { delete: old });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { skeleton, ...(Object.keys(files).length ? { files } : {}) });
+      return {
+        rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, removed: old.length,
+        warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}), ...(image ? { image: true } : {}),
+      };
     }
     case "changes": {
       // POST: reading with "last" moves the consumer's read cursor.

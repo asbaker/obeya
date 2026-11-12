@@ -1596,3 +1596,45 @@ test("navigation: Back and Forward move between pages; picker rows are links (ne
   assert.match(await A.getAttribute("[data-testid=page-pill]", "title"), new RegExp(`^${deep} · `));
   await A.close();
 });
+
+test("mermaid: a flowchart as editable elements with stable ids; re-running replaces it in place; other types as an image", { skip }, async () => {
+  const opened = await cli(["open", "mm", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const flow = "flowchart TD\n A[Christmas] -->|Get money| B(Go shopping)\n B --> C{Let me think}\n";
+  let r = await cli(["mermaid", "mm", "--file", "-", "--id", "x", "--at", "100,200"], { stdin: flow });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.deepEqual(Object.keys(r.json.result).filter((k) => !["rev", "createdPage", "created", "removed", "warnings", "fixes", "image"].includes(k)), []);
+  assert.equal(r.json.result.removed, 0);
+  const els = async () => (await cli(["get", "mm"])).json.result.elements.filter((e) => e.id.startsWith("x-"));
+  const first = await els();
+  assert.deepEqual(first.map((e) => e.id).sort(), ["x-A", "x-A_B", "x-B", "x-B_C", "x-C"]);
+  assert.equal(first.find((e) => e.id === "x-C").type, "diamond");
+  assert.equal(first.find((e) => e.id === "x-A").text, "Christmas");
+  assert.equal(Math.min(...first.map((e) => e.x)), 100);
+  assert.ok(first.every((e) => e.groups?.includes("x")), "one group");
+
+  // Again, with a node renamed and one removed: replaced, where it was.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "x"], { stdin: "flowchart TD\n A[Holidays] --> B(Go shopping)\n" });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.result.removed, 5);
+  const second = await els();
+  assert.deepEqual(second.map((e) => e.id).sort(), ["x-A", "x-A_B", "x-B"]);
+  assert.equal(second.find((e) => e.id === "x-A").text, "Holidays");
+  assert.equal(Math.min(...second.map((e) => e.x)), 100, "the same place");
+
+  // A type the converter can't draw as elements: one image.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "pets"], { stdin: 'pie title Pets\n "Dogs" : 386\n "Cats" : 85\n' });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.result.image, true);
+  assert.equal((await cli(["get", "mm"])).json.result.elements.find((e) => e.id === "pets-m1")?.type, "image");
+
+  // A syntax error changes nothing.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "bad"], { stdin: "flowchart TD\n A[x] -->> B(\n" });
+  assert.equal(r.json.error.code, "invalid_mermaid", r.stdout);
+  assert.ok(!(await cli(["get", "mm"])).json.result.elements.some((e) => e.id.startsWith("bad-")));
+  await A.close();
+});

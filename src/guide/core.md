@@ -20,7 +20,7 @@ IDs are opaque: choose your own when you create elements, otherwise read them (`
 
 ## Lifecycle
 
-The server starts itself when needed and stops after 12 idle hours; a stopped server is not an error. Only `patch`, `show` and `library insert` need a canvas tab: the CLI opens one, or with `--no-open` (prefer it when the person may be away) exits `2` with the link. Patching a page they aren't looking at doesn't move their view: tell them what you changed and where.
+The server starts itself when needed and stops after 12 idle hours; a stopped server is not an error. Only `patch`, `mermaid`, `show` and `library insert` need a canvas tab: the CLI opens one, or with `--no-open` (prefer it when the person may be away) exits `2` with the link. Patching a page they aren't looking at doesn't move their view: tell them what you changed and where.
 
 ## Read, cheapest first
 
@@ -28,11 +28,9 @@ The server starts itself when needed and stops after 12 idle hours; a stopped se
 obeya pages                            # pages, frame counts, last edit
 obeya describe <page> --format text    # frames, elements, labels, ids: start here
 obeya get <page> --frame <id>          # boxes and coordinates, to place or move things
-obeya describe <page> --layout --frame <id>   # rows in reading order: check an arrangement as text
-obeya lint <page>                      # overlaps, clipped text, unframed, misrouted arrows, contrast, …
+obeya describe <page> --layout --frame <id>   # rows in reading order: an arrangement as text
+obeya lint <page>                      # overlaps, clipped text, misrouted arrows, contrast, …
 ```
-
-`describe` is a third the size of `get`; use `get` only for positions.
 
 ## Patch
 
@@ -49,6 +47,7 @@ obeya lint <page>                      # overlaps, clipped text, unframed, misro
 - **When the person says they changed something**, read `obeya changes <page>` and treat circles, arrows and notes as instructions.
 - **When the page asks the person something** (questions, triage, review, ranking), also start `obeya wait <page> --frame <id> --ask "…"` in the background, so their answers on the page come back to you when they press Done. Asking in chat is fine too; say which page you're waiting on (`--skill wait`).
 - **Prefer real components** (icons, cloud and UI kits) over plain rectangles (`--skill library`).
+- **Flowcharts, sequence, class, state, ER diagrams**: Mermaid via `obeya mermaid` (`--skill mermaid`).
 
 ## Check your work
 
@@ -58,11 +57,12 @@ obeya lint <page>                      # overlaps, clipped text, unframed, misro
 
 ## Topics: `obeya --skill <topic>`
 
-- `patch`: shapes and examples, layout directives, groups, how the editor adjusts geometry
+- `patch`: shapes, examples, layout directives, groups, what the editor adjusts
 - `changes`: reading what the person did, `pointsAt`, bands, cursors
-- `wait`: asking the person to do something on a page, then getting their changes on Done
-- `library`: finding and inserting components and icons from the Excalidraw catalogue
-- `images`: putting local images and screenshots on a page
+- `wait`: asking the person for something on a page; their changes on Done
+- `library`: components and icons from the Excalidraw catalogue
+- `mermaid`: diagrams from Mermaid text
+- `images`: local images and screenshots on a page
 - `prototype`: links between frames and pages (always relative), clickable areas, presenting
 - `export`: SVG, PNG, HTML slide deck, PDF
 - `pages`: folders, renaming and moving pages

@@ -105,6 +105,24 @@ export const COMMANDS = {
       "The patch format: obeya --skill patch.",
     ],
   },
+  mermaid: {
+    usage: "mermaid <page> --file <path.mmd|-> --id <prefix> [--frame <id>] [--at <x,y>]",
+    summary: "Draw a Mermaid diagram as editable elements; run it again to replace it from the .mmd",
+    page: true,
+    flags: ["file", "id", "frame", "at"],
+    required: ["file", "id"],
+    live: true,
+    mutating: true,
+    details: [
+      "Ids are <prefix>-<mermaid id> (A, A_B, …) or <prefix>-m1, …; the diagram is one group. Again with the same --id: replaced,",
+      "where it was. Flowchart, sequence, class, state, ER, gantt, quadrant, timeline: elements; other types: one image.",
+      "Default place: the earlier run, else inside --frame, else below the page. Prints {rev, created, removed, warnings, fixes, image?}.",
+    ],
+    validate(plan, bad) {
+      if (!/^[a-z0-9][a-z0-9._-]{0,47}$/i.test(plan.flags.id)) throw bad("--id is 1-48 letters, digits, . _ -");
+      if (plan.flags.at !== undefined && !/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(plan.flags.at)) throw bad("--at is x,y in scene units, e.g. --at 120,80");
+    },
+  },
   changes: {
     usage: "changes <page> [--since last|<rev>] [--source user|agent|all] [--consumer <name>]",
     summary: "What the person changed since your last read, with labels folded and annotations resolved (pointsAt)",

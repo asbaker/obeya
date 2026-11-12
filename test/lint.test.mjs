@@ -120,6 +120,11 @@ test("misrouted-arrow: a bound end drawn far from its shape", () => {
 test("stray: something outside frames far from everything else", () => {
   const els = [frame("f", 0, 0, 800, 600), box("a", 10, 10, { frameId: "f" }), box("near", 900, 0), box("lost", 5000, 5000)];
   assert.deepEqual(rules(els, { rules: ["stray"] }), [["stray", "lost"]]);
+  // A group is one object: alone on a page it's not stray, and far away it's reported once.
+  const g = (id, x, y) => box(id, x, y, { groupIds: ["d"] });
+  assert.deepEqual(rules([g("p", 0, 0), g("q", 0, 300), g("r", 0, 600)], { rules: ["stray"] }), []);
+  const far = lint([...els.slice(0, 3), g("p", 5000, 5000), g("q", 5000, 5300)], { rules: ["stray"] });
+  assert.deepEqual(far.map((f) => [f.rule, ...f.ids, f.group]), [["stray", "p", "d"]]);
 });
 
 test("empty-frame and crowded-frame", () => {

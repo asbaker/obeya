@@ -20,6 +20,14 @@ export function renderRoutes({ store, tabs, dir }) {
       return json(res, 200, { png: reply.png, width: reply.width, height: reply.height });
     }],
 
+    // Mermaid text → the converter's skeletons and files, made in a tab (obeya mermaid).
+    ["POST", "/api/mermaid", async ({ req, res }) => {
+      const body = await readJSON(req);
+      if (typeof body.text !== "string" || !body.text.trim() || body.text.length > 50000) throw new ApiError(400, "invalid_argument", "mermaid text is 1-50000 characters");
+      const reply = await tabs.ask("mermaid", { text: body.text }, { renderers: true, timeoutMs: 60000, needs: "mermaid" });
+      return json(res, 200, { elements: reply.elements, files: reply.files });
+    }],
+
     // body: {items: [{page, frame?, around?: [id]}], type: "svg"|"png", scale?, embedScene?, padding?, cap?}
     ["POST", "/api/export", async ({ req, res }) => {
       const body = await readJSON(req);
