@@ -70,7 +70,7 @@ export const COMMANDS = {
     flags: ["format", "frame", "layout"],
     details: [
       "--layout: each frame as rows in reading order (sizes, gaps, what sits inside what, arrows), to check an arrangement without a screenshot.",
-      "--frame <id>: one frame. --format text prints without the JSON envelope ({page, rev, outline} or {page, rev, layout}).",
+      "--frame <id>: one frame. --format text prints without the JSON envelope ({rev, outline} or {rev, layout}).",
     ],
     validate(plan, bad) {
       if (plan.flags.format !== undefined && !["json", "text"].includes(plan.flags.format)) throw bad('--format must be "json" or "text"');
@@ -82,7 +82,7 @@ export const COMMANDS = {
     page: true,
     flags: ["frame", "rule"],
     details: [
-      "Prints {page, rev, findings: [{rule, ids, frame, message}]}. Rules: overlap, clipped-text, outside-frame,",
+      "Prints {findings: [{rule, ids, frame?, …numbers}], fixes: {rule: fix}}. Rules: overlap, clipped-text, outside-frame,",
       "loose-arrow, misrouted-arrow, near-miss, hidden, unframed, stray, empty-frame, crowded-frame, small-text, contrast;",
       "--rule keeps only those. Changes nothing.",
     ],
@@ -101,7 +101,7 @@ export const COMMANDS = {
     live: true,
     mutating: true,
     details: [
-      "--file - reads stdin. Creates the page if needed; one undo step. Prints {page, rev, createdPage, created, changed, warnings}.",
+      "--file - reads stdin. Creates the page if needed; one undo step. Prints {rev, created, changed, warnings, fixes}.",
       "The patch format: obeya --skill patch.",
     ],
   },
@@ -148,7 +148,7 @@ export const COMMANDS = {
     required: ["ask"],
     details: [
       "Shows --ask in a banner with a Done button on tabs showing the page; opens no tab. No timeout by default.",
-      "Returns {page, frame, done, waited, rev, since, changes}; done is button, timeout or stopped. Run it in the background.",
+      "Returns {done, rev, changes}; done is button, timeout or stopped. Run it in the background.",
     ],
     validate(plan, bad) {
       const { ask, timeout } = plan.flags;

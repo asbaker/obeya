@@ -103,7 +103,6 @@ export async function ensureServer(plan, client, note) {
     } catch {}
     throw new CliError("server_start_failed", `server did not start within ${SERVER_START_MS / 1000}s${exited !== null ? ` (exit ${exited})` : ""}; see .obeya/server.log in the pages dir`, tail ? { log: tail } : {});
   }
-  note(`started obeya server at ${client.base}`);
   return i;
 }
 
@@ -124,7 +123,6 @@ export async function ensureBrowser(plan, client, note, page, frame) {
   const url = client.canvasUrl(page, frame);
   if (plan.noOpen) throw new CliError("no_canvas_open", "no canvas tab is connected; open the link, then retry", { url });
   openInBrowser(url);
-  note("opened the canvas in your browser; waiting for it to connect…");
   for (let t = 0; t < BROWSER_WAIT_MS / 250; t++) {
     await sleep(250);
     if ((await client.info())?.browsers > 0) return;

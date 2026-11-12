@@ -1,6 +1,7 @@
 // HTTP plumbing for the server: errors, JSON bodies, static files, and a small
 // route table.
 import fs from "node:fs";
+import { nearestNames } from "../lib/names.mjs";
 
 export class ApiError extends Error {
   constructor(status, code, message, extra) {
@@ -53,7 +54,8 @@ export function sendFile(res, file, type) {
 }
 
 export const requirePage = (store, name) => {
-  if (!store.exists(name)) throw new ApiError(404, "unknown_page", `no page "${name}"`, { pages: store.list() });
+  // The nearest names, not every page: the list grows with the folder.
+  if (!store.exists(name)) throw new ApiError(404, "unknown_page", `no page "${name}"`, { pages: nearestNames(name, store.list()) });
 };
 export const requireElement = (store, name, id) => {
   const el = id ? store.load(name).byId.get(id) : null;

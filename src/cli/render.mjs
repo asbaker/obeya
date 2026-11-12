@@ -40,7 +40,6 @@ export async function withRenderer(plan, client, note, env, fn, { offline, used 
   let exited = false;
   child.on("exit", () => (exited = true));
   child.on("error", () => (exited = true));
-  note("rendering in headless Chrome…");
   try {
     let ready = false;
     for (let t = 0; t < 240 && !ready && !exited; t++) {

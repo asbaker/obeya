@@ -129,7 +129,8 @@ test("idle timeout: the server saves and stops itself with no tab and no calls",
   const port = await freePort();
   const env = { ...process.env, OBEYA_DIR: path.join(dir, "c"), OBEYA_PORT: String(port), OBEYA_IDLE_TIMEOUT: "0.01" }; // 0.6 s
   const r = await run(["serve"], { env });
-  assert.equal(JSON.parse(r.stdout).result.idleTimeout, 0.01);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await raw(port, { path: "/api/info" })).json.idleTimeout, 0.01);
   await raw(port, { method: "POST", path: "/api/pages/b/sync", headers: H(), body: { elements: [rect("r1")] } });
   // Any request (status included) counts as activity, so stay quiet and wait.
   await new Promise((res) => setTimeout(res, 1500));
@@ -143,7 +144,8 @@ test("idle timeout 0 never stops", async () => {
   const env = { ...process.env, OBEYA_DIR: path.join(dir, "c"), OBEYA_PORT: String(port) };
   servers.push(env);
   const r = await run(["serve", "--idle-timeout", "0"], { env });
-  assert.equal(JSON.parse(r.stdout).result.idleTimeout, 0);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await raw(port, { path: "/api/info" })).json.idleTimeout, 0);
 });
 
 test("changes defaults: the person's edits since your last read, brief entries; --source all adds `source` (agent edits: smoke test)", async () => {
@@ -165,7 +167,7 @@ test("bands: set, list, delete, and moves across them in `changes`", async () =>
   const j = (r) => JSON.parse(r.stdout);
   const set = j(await run(["band", "set", "board", "release", "--y", "400"], { env }));
   assert.ok(set.result);
-  assert.deepEqual(set.result.band, { name: "release", axis: "y", from: 400, to: 400 });
+  assert.deepEqual(set.result.bands, [{ name: "release", axis: "y", from: 400, to: 400 }]);
   await run(["band", "set", "board", "lane", "--x", "500", "--to", "900"], { env });
   assert.deepEqual(j(await run(["band", "list", "board"], { env })).result.bands.map((b) => b.name), ["lane", "release"]);
 
@@ -176,7 +178,7 @@ test("bands: set, list, delete, and moves across them in `changes`", async () =>
   const [moved] = j(await run(["changes", "board", "--since", String(start0)], { env })).result.changes;
   assert.deepEqual(moved.crossed, [{ band: "release", from: "before", to: "after" }]);
 
-  assert.equal(j(await run(["band", "delete", "board", "release"], { env })).result.deleted, "release");
+  assert.deepEqual(j(await run(["band", "delete", "board", "release"], { env })).result.bands.map((b) => b.name), ["lane"]);
   assert.equal(j(await run(["band", "delete", "board", "release"], { env })).error.code, "unknown_band");
   assert.ok(fs.existsSync(path.join(env.OBEYA_DIR, ".obeya", "board.bands.json")));
 });
@@ -305,10 +307,10 @@ test("folders: pages in folders through URLs and the CLI; delete; names that try
   assert.equal((await raw(port, { method: "POST", path: P("Café Ideen"), headers: H() })).status, 201, "spaces and accents");
   const cli = async (...a) => JSON.parse((await run(a, { env })).stdout);
   assert.deepEqual((await cli("pages")).result.pages.map((p) => p.name), ["Café Ideen", "project-a/overview"]);
-  assert.equal((await cli("get", "project-a/overview")).result.page, "project-a/overview");
+  assert.ok(Array.isArray((await cli("get", "project-a/overview")).result.elements));
   // The CLI's rename moves a page between folders.
   const moved = await cli("rename", "project-a/overview", "project-b/overview");
-  assert.equal(moved.result.to, "project-b/overview");
+  assert.deepEqual(moved.result, { staleLinks: [] });
   assert.ok(fs.existsSync(path.join(env.OBEYA_DIR, "project-b", "overview.excalidraw")) && !fs.existsSync(path.join(env.OBEYA_DIR, "project-a")));
   // Names that try to leave the pages folder, or break the rule.
   for (const bad of ["..%2Fx", "a%2F..%2F..%2Fx", "%2Fetc", "a%5Cb", "a%3Ab", ".obeya%2Fcursors", "%E0%A4%A"]) {

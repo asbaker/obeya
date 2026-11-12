@@ -58,7 +58,6 @@ test("no tab, no Chrome: shot uses the official CLI with --fonts-url none and th
   const r = await run(["shot", "board", "--frame", "f1", "--scale", "2", "--out", out, "--no-open"], { env });
   assert.equal(r.code, 0, r.stdout);
   const res = JSON.parse(r.stdout).result;
-  assert.equal(res.renderer, "excalidraw-cli");
   assert.deepEqual([res.width, res.height], [1, 1]);
   assert.equal(fs.readFileSync(out).subarray(1, 4).toString(), "PNG");
   const [call] = fs.readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse);

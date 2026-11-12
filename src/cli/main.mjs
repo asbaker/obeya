@@ -1,9 +1,12 @@
 // obeya CLI: the agent's side of the canvas. Talks only to the local
 // server, and starts it in the background when it isn't running.
 //
-// Every command prints one compact JSON envelope on stdout:
+// Every command prints one compact JSON line on stdout:
 //   {"result": {...}}
 //   {"error": {"code": "...", "message": "...", "hint": "...", ...}}
+// or nothing, when a success has nothing to report (stop, show): exit 0 says it.
+// A result carries only what the agent acts on: no echo of its arguments, no
+// debugging fields, no prose that restates fields. test/responses.test.mjs keeps it so.
 // Exit codes: 0 ok, 1 error, 2 the person needs to act (open the link).
 
 
@@ -15,16 +18,16 @@ import { commandHelp, lookup, overviewHelp } from "../lib/commands.mjs";
 import { errorBody } from "../lib/hints.mjs";
 import { guide } from "./guide.mjs";
 import { compact, layoutOutline, lean, outline } from "../lib/report.mjs";
-import { lint, RULES } from "../lib/lint.mjs";
+import { fixes, lint, RULES } from "../lib/lint.mjs";
 import { sameDir, shotsDir } from "../lib/paths.mjs";
-import { findItem, instantiate, itemSize } from "../lib/library.mjs";
+import { findItem, instantiate } from "../lib/library.mjs";
 import { ensureLibrary } from "../lib/libcache.mjs";
 import { CliError, ensureBrowser, ensureServer, makeClient, openInBrowser, sleep } from "./client.mjs";
 import { resolvePort } from "./ports.mjs";
 import { resolveImages } from "./images.mjs";
 import { officialRender, withRenderer } from "./render.mjs";
 import { runExport } from "./export.mjs";
-import { lib, libSummary, notifyLibraries, runLibrary } from "./library.mjs";
+import { lib, notifyLibraries, runLibrary } from "./library.mjs";
 
 export { CliError };
 
@@ -54,8 +57,8 @@ export async function run(argv, ctx = {}) {
     plan = parseCli(argv, env, cwd);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
+    // The usage once, in the envelope: agents read stderr too.
     io.out.push(JSON.stringify({ error: errorBody(err.code, err.message, err.command ? { usage: `obeya ${lookup(err.command).usage}` } : {}) }));
-    errLine(err.command ? commandHelp(err.command) : "Run `obeya --help` for the list of commands.");
     return done(1);
   }
 
@@ -97,7 +100,6 @@ export async function run(argv, ctx = {}) {
       return done(1);
     }
     io.out.push(JSON.stringify({ error: errorBody(err.code, err.message, err.extra) }));
-    if (err.extra?.url) note(`open this link in your browser: ${err.extra.url}`);
     return done(PERSON_ACTS.has(err.code) ? 2 : 1);
   }
 }
@@ -140,7 +142,6 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     const [libId, itemId] = plan.args.item.split("/");
     const { lib: l, downloaded } = await lib(() => ensureLibrary(env, libId));
     if (downloaded) {
-      note(`downloaded ${l.id} into your library cache`);
       await notifyLibraries(plan, client);
     }
     try {
@@ -157,41 +158,52 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
   switch (cmd) {
     case "serve": {
       const i = await ensureServer(plan, client, note);
-      return { url: client.base, dir: i.dir, pid: i.pid, browsers: i.browsers, idleTimeout: i.idleTimeout };
+      return { url: client.base, browsers: i.browsers };
     }
     case "status": {
       const i = await client.info();
       if (i?.foreign) return { running: false, url: client.base, portInUse: true };
       if (!i) return { running: false, url: client.base };
-      return { running: true, url: client.base, dir: i.dir, sameDir: sameDir(i.dir, plan.dir), pid: i.pid, browsers: i.browsers, version: i.version, idleTimeout: i.idleTimeout };
+      // sameDir only when false: another folder's server answered on this port.
+      return { running: true, url: client.base, browsers: i.browsers, ...(sameDir(i.dir, plan.dir) ? {} : { sameDir: false }) };
     }
     case "stop": {
       const i = await client.info();
-      if (!i || i.foreign) return { running: false, stopped: false };
+      if (!i || i.foreign) return undefined; // nothing was running: nothing to report
       if (!sameDir(i.dir, plan.dir)) throw new CliError("port_in_use_other_dir", `port ${plan.port} is serving a canvas for a different directory; not stopping it`, { serving: i.dir });
       await client.call("POST", "/api/shutdown");
       // Return once the port is free, so a following command can start a new server.
       for (let t = 0; t < 50 && (await client.info()); t++) await sleep(100);
-      return { running: false, stopped: true };
+      return undefined;
     }
     case "open": {
       const i = await ensureServer(plan, client, note);
       const url = client.canvasUrl(page, flags.frame);
       if (i.browsers > 0) {
         if (page) await client.call("POST", `/api/pages/${encodeURIComponent(page)}/show`, { frame: flags.frame });
-        return { url, opened: false, switched: Boolean(page), note: "a canvas tab is already connected" };
+        return { url, opened: false, ...(page ? { switched: true } : {}) };
       }
-      if (plan.noOpen) return { url, opened: false, note: "open this link in your browser" };
+      if (plan.noOpen) return { url, opened: false };
       openInBrowser(url);
       return { url, opened: true };
     }
-    case "pages":
-      return await client.call("GET", "/api/pages");
+    case "pages": {
+      // modified to the minute; rev comes with get, changes and patch, where it's used.
+      const r = await client.call("GET", "/api/pages");
+      return {
+        pages: r.pages.map((p) => ({ name: p.name, frames: p.frames, modified: p.modified ? p.modified.slice(0, 16) : null })),
+        ...(r.skipped?.length ? { skipped: r.skipped } : {}),
+      };
+    }
     case "get": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
       let els = flags.full ? lean(scene.elements) : compact(scene.elements);
-      if (flags.frame) els = els.filter((e) => e.id === flags.frame || e.frame === flags.frame || e.frameId === flags.frame);
-      return { page, rev, elements: els };
+      if (flags.frame) {
+        // The frame asked for isn't repeated on each element.
+        els = els.filter((e) => e.id === flags.frame || e.frame === flags.frame || e.frameId === flags.frame)
+          .map(({ frame, frameId, ...e }) => ({ ...e, ...(frame && frame !== flags.frame ? { frame } : {}), ...(frameId && frameId !== flags.frame ? { frameId } : {}) }));
+      }
+      return { rev, elements: els };
     }
     case "describe": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
@@ -201,25 +213,27 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
         print(text);
         return undefined;
       }
-      return flags.layout ? { page, rev, layout: text } : { page, rev, outline: text };
+      return flags.layout ? { rev, layout: text } : { rev, outline: text };
     }
     case "lint": {
       const { rev, scene } = await client.call("GET", `/api/pages/${encodeURIComponent(page)}`);
       if (flags.frame && !scene.elements.some((e) => e.id === flags.frame && !e.isDeleted)) throw new CliError("unknown_element", `no element "${flags.frame}" on page "${page}"`);
       const rules = flags.rule ? flags.rule.split(",").filter(Boolean) : RULES;
-      return { page, rev, findings: lint(scene.elements, { frame: flags.frame, rules }) };
+      const findings = lint(scene.elements, { frame: flags.frame, rules });
+      return { findings, ...(findings.length ? { fixes: fixes(findings) } : {}) };
     }
     case "patch": {
       // Counts, not echoes: the agent knows the ids it sent. What it acts on is `warnings`;
       // what the editor did beyond the patch is in `changes --source agent --since <rev>`.
       const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
-      return { page: r.page, rev: r.rev, createdPage: r.createdPage, created: r.created.length, changed: r.changed.length, warnings: r.warnings };
+      return { rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, changed: r.changed.length, warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}) };
     }
     case "changes": {
       // POST: reading with "last" moves the consumer's read cursor.
       // By default: what the person did since this consumer's last read. The agent knows its own edits.
       const source = flags.source ?? "user";
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/changes`, { since: flags.since ?? "last", consumer: plan.consumer, brief: true, ...(source === "all" ? {} : { source }) });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/changes`, { since: flags.since ?? "last", consumer: plan.consumer, brief: true, ...(source === "all" ? {} : { source }) });
+      return { rev: r.rev, changes: r.changes };
     }
     case "shot": {
       // The person's tab renders if one is open; otherwise a headless Chrome;
@@ -245,11 +259,11 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const out = flags.out ? path.resolve(cwd, flags.out) : path.join(shotsDir(plan.dir), `${page}${suffix}.png`);
       fs.mkdirSync(path.dirname(out), { recursive: true });
       fs.writeFileSync(out, r.bytes ?? Buffer.from(r.png, "base64"));
-      // widenedTo: the crop covered most of one frame, so the shot is that frame.
-      return { page, frame: flags.frame ?? r.widenedTo ?? null, ...(around ? { around } : {}), ...(r.widenedTo ? { widenedTo: r.widenedTo } : {}), out, width: r.width, height: r.height, renderer: used.renderer };
+      // out only when the agent didn't choose it. widenedTo: the crop covered most of one frame, so the shot is that frame.
+      return { ...(flags.out ? {} : { out }), width: r.width, height: r.height, ...(r.widenedTo ? { widenedTo: r.widenedTo } : {}) };
     }
     case "library insert": {
-      const { lib, item } = libraryItem;
+      const { item } = libraryItem;
       if (flags.frame) {
         const scene = await client.call("GET", `/api/pages/${encodeURIComponent(page)}?ifMissing=empty`);
         if (!scene.scene.elements.some((e) => e.id === flags.frame && e.type === "frame" && !e.isDeleted)) {
@@ -260,29 +274,35 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const [x, y] = flags.at.split(",").map(Number);
       const elements = instantiate(item, { at: [x, y], prefix, frame: flags.frame ?? null });
       const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { elements });
-      return { ...r, item: `${lib.id}/${item.id}`, library: libSummary(lib), ids: elements.map((e) => e.id), at: [x, y], size: itemSize(item) };
+      // The ids, because the agent didn't choose them; the size is in `library show`.
+      return { rev: r.rev, ids: elements.map((e) => e.id) };
     }
     case "export":
       return await runExport(plan, client, note, env, cwd);
-    case "rename":
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/rename`, { to: plan.args.to });
+    case "rename": {
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/rename`, { to: plan.args.to });
+      return { staleLinks: r.staleLinks };
+    }
     case "band list":
-      return await client.call("GET", `/api/pages/${encodeURIComponent(page)}/bands`);
+      return { bands: (await client.call("GET", `/api/pages/${encodeURIComponent(page)}/bands`)).bands };
     case "band set": {
       const axis = flags.x !== undefined ? "x" : "y";
       const from = Number(flags.x ?? flags.y);
-      return await client.call("PUT", `/api/pages/${encodeURIComponent(page)}/bands/${plan.args.name}`, { axis, from, to: flags.to !== undefined ? Number(flags.to) : from });
+      const r = await client.call("PUT", `/api/pages/${encodeURIComponent(page)}/bands/${plan.args.name}`, { axis, from, to: flags.to !== undefined ? Number(flags.to) : from });
+      return { bands: r.bands };
     }
     case "band delete":
-      return await client.call("DELETE", `/api/pages/${encodeURIComponent(page)}/bands/${plan.args.name}`);
+      return { bands: (await client.call("DELETE", `/api/pages/${encodeURIComponent(page)}/bands/${plan.args.name}`)).bands };
     case "show":
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/show`, { frame: flags.frame });
+      await client.call("POST", `/api/pages/${encodeURIComponent(page)}/show`, { frame: flags.frame });
+      return undefined;
     case "wait": {
       // Never open or switch a tab: the person keeps their focus. The page pill counts what's waiting.
       const i = await client.info();
       if (!i?.showing?.includes(page)) note(`no tab shows ${page}; the request waits there: ${client.canvasUrl(page, flags.frame)}`);
       const timeoutMs = flags.timeout ? Math.round(Number(flags.timeout) * 60000) : 0;
-      return await client.call("POST", `/api/pages/${encodeURIComponent(page)}/wait`, { ask: flags.ask, frame: flags.frame, consumer: plan.consumer, timeoutMs });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/wait`, { ask: flags.ask, frame: flags.frame, consumer: plan.consumer, timeoutMs });
+      return { done: r.done, rev: r.rev, changes: r.changes };
     }
   }
   throw new CliError("unknown_command", `unknown command "${cmd}"`);

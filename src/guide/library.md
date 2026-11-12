@@ -4,7 +4,7 @@ Prefer real components over plain rectangles. Any library in the public Excalidr
 
 ```bash
 obeya library search aws icons                 # prefer results with "named": true
-obeya library show architecture-diagram-components            # items as <lib>/<item>, with sizes
+obeya library show architecture-diagram-components            # item ids and sizes; insert as <lib>/<item>
 obeya library show software-architecture --sheet shots/lib.png # a labelled picture of every item
 obeya library insert architecture-diagram-components/slack roadmap --at 120,560 --frame f-sys --id slack
 ```

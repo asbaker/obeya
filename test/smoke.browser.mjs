@@ -174,6 +174,8 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   const made = new Set((await cli(["get", "board"])).json.result.elements.map((e) => e.id));
   for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(made.has(id), `created ${id}`);
   assert.equal(patched.json.result.createdPage, true);
+  // Thin: only what the agent acts on (test/responses.test.mjs covers the commands that need no tab).
+  assert.deepEqual(Object.keys(patched.json.result).filter((k) => !["rev", "createdPage", "created", "changed", "warnings", "fixes"].includes(k)), []);
 
   // Moving a labelled note with an edit moves its label too.
   const before = (await T("elements")).find((e) => e.containerId === "n5");
@@ -287,17 +289,15 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.equal(shot.code, 0, shot.stdout);
   assert.deepEqual([...fs.readFileSync(png).subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(shot.json.result.width > 200 && shot.json.result.height > 100);
-  assert.equal(shot.json.result.renderer, "tab");
+  assert.deepEqual(Object.keys(shot.json.result), ["width", "height"], "no echo of page, frame or --out");
   // --around crops to some elements plus a margin: much smaller than their frame.
   const near = await cli(["shot", "board", "--around", "n1,n2", "--out", path.join(S.tmp, "shots", "near.png")]);
   assert.equal(near.code, 0, near.stdout);
-  assert.deepEqual(near.json.result.around, ["n1", "n2"]);
   assert.ok(near.json.result.width > 400 && near.json.result.width < shot.json.result.width, `around: ${near.json.result.width} vs frame ${shot.json.result.width}`);
   assert.ok(near.json.result.height > 200 && near.json.result.height < shot.json.result.height);
   // Ids spread across most of a frame: the frame itself, and the result says so.
   const wide = await cli(["shot", "board", "--around", "n1,n3,go", "--out", path.join(S.tmp, "shots", "wide.png")]);
   assert.equal(wide.json.result.widenedTo, "f1", wide.stdout);
-  assert.equal(wide.json.result.frame, "f1");
   assert.equal(near.json.result.widenedTo, undefined, "n1,n2 stays a crop");
   // Uncapped with an explicit --scale; capped otherwise.
   const big = await cli(["shot", "board", "--scale", "3", "--out", path.join(S.tmp, "shots", "big.png")]);
@@ -386,7 +386,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.equal((await cli(["changes", "board", "--since", "last", "--source", "user"])).json.result.changes.length, 0);
 
   // 6. stop saves everything; the log survives a restart.
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   const saved = JSON.parse(fs.readFileSync(path.join(S.tmp, "canvas", "board.excalidraw"), "utf8"));
   const live = saved.elements.filter((e) => !e.isDeleted);
   assert.ok(Math.abs(live.find((e) => e.id === "n1").y - (n1.y + 300)) <= 3);
@@ -403,7 +403,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   // Patches no longer refit the view, so point it at n2's frame before dragging.
   assert.equal((await cli(["show", "board", "--frame", "f1"])).code, 0);
   await sleep(300);
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   await until(async () => (await T("connection")) === "away", { what: "the tab knows the server is away" });
   const n2 = await el("n2");
   await drag(center(n2), [n2.x + n2.width / 2, n2.y + n2.height / 2 + 150]);
@@ -582,7 +582,7 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   const pngs = await cli(["export", "board", "--format", "png", "--frames", "--out", path.join(out, "frames")]);
   assert.equal(pngs.code, 0, pngs.stdout);
   assert.deepEqual(fs.readdirSync(path.join(out, "frames")).sort(), ["01-board.png", "02-next.png"]);
-  for (const f of pngs.json.result.files) assert.equal(fs.readFileSync(f.file).subarray(1, 4).toString(), "PNG");
+  for (const f of pngs.json.result.files) assert.equal(fs.readFileSync(path.join(out, "frames", f.file)).subarray(1, 4).toString(), "PNG");
 
   // HTML deck: works offline, makes no requests, hotspots and keys navigate.
   const deckFile = path.join(out, "deck.html");
@@ -617,7 +617,7 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   await until(async () => (await cli(["status"])).json.result.browsers === 0, { what: "no tabs" });
   const headless = await cli(["export", "board", "--format", "svg", "--frame", "f2", "--out", path.join(out, "f2.svg")]);
   assert.equal(headless.code, 0, headless.stdout + headless.stderr);
-  assert.match(headless.stderr, /headless Chrome/);
+  assert.equal(headless.stderr, "", "no progress lines");
   assert.ok(fs.readFileSync(path.join(out, "f2.svg"), "utf8").startsWith("<svg"));
   const after = (await cli(["status"])).json.result;
   assert.equal(after.browsers, 0);
@@ -626,7 +626,6 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   const links = fs.readFileSync(S.opened, "utf8").trim().split("\n").length;
   const quiet = await cli(["shot", "board", "--frame", "f2", "--out", path.join(out, "shot-f2.png")]);
   assert.equal(quiet.code, 0, quiet.stdout + quiet.stderr);
-  assert.equal(quiet.json.result.renderer, "headless");
   assert.equal(fs.readFileSync(S.opened, "utf8").trim().split("\n").length, links, "no browser tab opened");
   assert.equal(fs.readFileSync(S.opened, "utf8").trim().split("\n").length >= 1, true);
 });
@@ -645,12 +644,9 @@ test("library: insert downloads on demand and opens a tab; predictable ids; fram
   await page.goto(u.href);
   const r = await inserting;
   assert.equal(r.code, 0, r.stdout + r.stderr);
-  assert.match(r.stderr, /downloaded shapes\.acme/);
-  const { ids, created, item, library } = r.json.result;
-  assert.equal(item, "shapes.acme/database");
-  assert.deepEqual(library.authors, ["Acme Example"]);
-  assert.deepEqual(ids, ["db-1", "db-2"]);
-  for (const id of ids) assert.ok(created.includes(id));
+  // The ids it made and the rev: no echo of the item, the library or the change log.
+  assert.deepEqual(Object.keys(r.json.result), ["rev", "ids"]);
+  assert.deepEqual(r.json.result.ids, ["db-1", "db-2"]);
 
   const els = (await cli(["get", "board"])).json.result.elements.filter((e) => e.id.startsWith("db-"));
   assert.deepEqual(els.map((e) => [e.id, e.x, e.y, e.text]), [["db-1", 100, 800, "DB"]], "label folded into its box, placed at --at");
@@ -766,7 +762,7 @@ test("undo of an agent patch, and an image dropped by the person: synced, saved,
   assert.equal((await cli(["export", "board", "--format", "svg", "--out", svgOut])).code, 0);
   assert.ok(fs.readFileSync(svgOut, "utf8").includes("data:image/png;base64,"), "image embedded in the export");
   await page.close();
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   const saved = JSON.parse(fs.readFileSync(path.join(S.tmp, "canvas", "board.excalidraw"), "utf8"));
   const savedImg = saved.elements.find((e) => e.id === img.id);
   assert.ok(savedImg && !savedImg.isDeleted);
@@ -1203,7 +1199,7 @@ test("the port comes back serving another folder: the tab stops and asks for a r
   await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
   const state = () => A.evaluate(() => window.obeyaTest.connection());
   await until(async () => (await state()) === "connected", { what: "connected" });
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   await until(async () => (await state()) === "away", { what: "away" });
   const other = path.join(S.tmp, "other-canvas");
   const env = S.env;
@@ -1212,7 +1208,7 @@ test("the port comes back serving another folder: the tab stops and asks for a r
     assert.equal((await cli(["pages"])).code, 0); // a server for another folder, same port
     await until(async () => (await state()) === "wrong-folder", { what: "the tab sees another folder", timeout: 20000 });
     assert.match(await A.textContent("#notice-text"), /different folder/);
-    assert.equal((await cli(["stop"])).json.result.stopped, true);
+    assert.equal((await cli(["stop"])).stdout, "");
   } finally {
     S.env = env;
   }

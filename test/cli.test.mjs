@@ -82,7 +82,8 @@ test("a mutating command with missing arguments prints help and does nothing", a
   const out = JSON.parse(r.stdout);
   assert.equal(out.id, undefined);
   assert.equal(out.error.code, "missing_argument");
-  assert.match(r.stderr, /Usage: obeya patch/);
+  assert.equal(out.error.usage, "obeya patch <page> --file <path|->");
+  assert.equal(r.stderr, "", "the usage once, in the envelope");
   assert.ok(!fs.existsSync(path.join(dir, "canvas")), "no server started, no dir created");
 });
 

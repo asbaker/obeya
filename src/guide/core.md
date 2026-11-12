@@ -14,7 +14,7 @@ You and the person share an Excalidraw canvas. They draw in a browser tab; you u
 
 ## Output
 
-One JSON line: `{"result":…}` or `{"error":{"code","message","hint",…}}`. Branch on `code` and do what `hint` says. Exit `0` ok, `1` error, `2` the person must act: give them `error.url`.
+One JSON line: `{"result":…}` or `{"error":{"code","message","hint",…}}`, or nothing when a success has nothing to report. Branch on `code` and do what `hint` says. Exit `0` ok, `1` error, `2` the person must act: give them `error.url`.
 
 IDs are opaque: choose your own when you create elements, otherwise read them (`describe`, `get`, `changes`); never guess one.
 

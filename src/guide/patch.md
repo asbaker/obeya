@@ -11,7 +11,7 @@ JSON
 - `elements`: partial edits merged onto existing elements by `id`: `x`, `y`, `backgroundColor`, `strokeColor`, `link`, `customData`, `name`. New elements need `skeleton`. A `link` to a page or element is relative: `?page=<page>&element=<id>`, never `http://127.0.0.1:<port>/…` (the port can change).
 - `delete`: ids; deleting a container deletes its label.
 - `toBack` / `toFront`: new elements land on top, so send backgrounds, bands and guide lines to the back.
-- The response is `{page, rev, createdPage, created, changed, warnings}`; `created` and `changed` are counts (labels and the editor's layout included). To see exactly what the editor did: `obeya changes <page> --source agent --since <rev before the patch>`.
+- The response is `{rev, created, changed, warnings, fixes}` (`createdPage: true` when it made the page); `created` and `changed` are counts (labels and the editor's layout included); `fixes` says how to fix each warning's rule. To see exactly what the editor did: `obeya changes <page> --source agent --since <rev before the patch>`.
 
 Sticky notes in a frame, a labelled box, and an arrow bound to both:
 

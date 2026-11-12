@@ -32,7 +32,7 @@ test("overlap: something in no frame over a framed shape counts (it's drawn over
 test("overlap: two boxes stacked on each other, a few pixels apart", () => {
   const els = [frame("f", 0, 0, 900, 900), note("card", 100, 190, { frameId: "f" }), note("link", 100, 188)];
   assert.deepEqual(rules(els, { rules: ["overlap"] }), [["overlap", "card", "link"]]);
-  assert.match(lint(els, { rules: ["overlap"] })[0].message, /stacked/);
+  assert.equal(lint(els, { rules: ["overlap"] })[0].stacked, true);
   assert.deepEqual(rules([note("a", 0, 0), note("b", 0, 0)], { rules: ["overlap"] }), [["overlap", "a", "b"]]);
 });
 
@@ -73,7 +73,7 @@ test("loose-arrow: an unbound end on a shape, an end bound to a deleted shape", 
 test("near-miss: neighbours a few pixels off", () => {
   // A column of notes, one 3 px to the right.
   assert.deepEqual(rules([note("a", 0, 0), note("b", 3, 240)]), [["near-miss", "a", "b"]]);
-  assert.match(lint([note("a", 0, 0), note("b", 3, 240)])[0].message, /left off by 3 px/);
+  assert.deepEqual(lint([note("a", 0, 0), note("b", 3, 240)])[0].off, { left: 3 });
   // Aligned, clearly apart, sub-pixel, or far away is fine.
   assert.deepEqual(rules([note("a", 0, 0), note("b", 0, 240)]), []);
   assert.deepEqual(rules([note("a", 0, 0), note("b", 40, 240)]), []);

@@ -131,7 +131,7 @@ $ obeya changes signup-flow
 | `obeya library` | Search, view and insert components from public libraries |
 
 - `obeya --skill` prints the guide for the installed version (a short core; `obeya --skill <topic>` for one topic, `obeya --skill all` for everything); the installed skill points at it.
-- Every command prints one JSON object: `{id, result}` or `{id, error: {code, message}}`.
+- Every command prints one compact JSON line, `{result}` or `{error: {code, message, hint}}`, holding only what an agent acts on; a success with nothing to report prints nothing.
 - `obeya --help` lists the rest.
 
 ## Privacy and security

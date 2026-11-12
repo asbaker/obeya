@@ -16,7 +16,7 @@ export const HINTS = {
   canvas_not_connected: "give the person error.url, ask them to open it, then retry",
 
   // pages and elements
-  unknown_page: "pick one of error.pages, or check obeya pages",
+  unknown_page: "pick one of error.pages (the nearest names), or check obeya pages",
   bad_page_name: "page names are parts joined by /, without \\ : * ? \" < > | and no part starting with .",
   page_exists: "pick another name",
   page_gone: "the page was deleted or renamed; check obeya pages",
