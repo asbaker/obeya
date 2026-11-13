@@ -24,6 +24,18 @@ test("overlap: shapes in different frames don't count", () => {
   assert.deepEqual(rules([frame("f1", 0, 0, 500, 500), frame("f2", 0, 600, 500, 500), box("a", 10, 10, { frameId: "f1" }), box("b", 50, 30, { frameId: "f2" })], { rules: ["overlap"] }), []);
 });
 
+test("overlap: something in no frame over a framed shape counts (it's drawn over the frame)", () => {
+  const els = [frame("f", 0, 0, 500, 500), box("a", 10, 10, { frameId: "f" }), box("b", 50, 30)];
+  assert.deepEqual(rules(els, { rules: ["overlap"] }), [["overlap", "a", "b"]]);
+});
+
+test("overlap: two boxes stacked on each other, a few pixels apart", () => {
+  const els = [frame("f", 0, 0, 900, 900), note("card", 100, 190, { frameId: "f" }), note("link", 100, 188)];
+  assert.deepEqual(rules(els, { rules: ["overlap"] }), [["overlap", "card", "link"]]);
+  assert.equal(lint(els, { rules: ["overlap"] })[0].stacked, true);
+  assert.deepEqual(rules([note("a", 0, 0), note("b", 0, 0)], { rules: ["overlap"] }), [["overlap", "a", "b"]]);
+});
+
 test("clipped-text: a label bigger than its shape", () => {
   assert.deepEqual(rules([box("a", 0, 0), label("t", "a", -10, 20, 120, 20)], { rules: ["clipped-text"] }), [["clipped-text", "a", "t"]]);
   assert.deepEqual(rules([box("a", 0, 0), label("t", "a", 10, 20, 80, 20)], { rules: ["clipped-text"] }), []);
@@ -61,7 +73,7 @@ test("loose-arrow: an unbound end on a shape, an end bound to a deleted shape", 
 test("near-miss: neighbours a few pixels off", () => {
   // A column of notes, one 3 px to the right.
   assert.deepEqual(rules([note("a", 0, 0), note("b", 3, 240)]), [["near-miss", "a", "b"]]);
-  assert.match(lint([note("a", 0, 0), note("b", 3, 240)])[0].message, /left off by 3 px/);
+  assert.deepEqual(lint([note("a", 0, 0), note("b", 3, 240)])[0].off, { left: 3 });
   // Aligned, clearly apart, sub-pixel, or far away is fine.
   assert.deepEqual(rules([note("a", 0, 0), note("b", 0, 240)]), []);
   assert.deepEqual(rules([note("a", 0, 0), note("b", 40, 240)]), []);
@@ -85,7 +97,7 @@ test("hidden: something under a filled shape drawn above it", () => {
 });
 
 test("labels and frames are not objects of their own", () => {
-  assert.deepEqual(rules([frame("f", 0, 0, 500, 500), box("a", 10, 10, { frameId: "f" }), label("t", "a", 20, 20, 60, 20)]), []);
+  assert.deepEqual(rules([frame("f", 0, 0, 500, 500), box("a", 10, 10, { frameId: "f" }), { ...label("t", "a", 20, 20, 60, 20), frameId: "f" }]), []);
 });
 
 test("--frame keeps findings in that frame; involving() keeps a patch's", () => {
@@ -96,4 +108,50 @@ test("--frame keeps findings in that frame; involving() keeps a patch's", () => 
 
 test("deleted elements are ignored", () => {
   assert.deepEqual(rules([box("a", 0, 0), box("b", 50, 30, { isDeleted: true })]), []);
+});
+
+test("misrouted-arrow: a bound end drawn far from its shape", () => {
+  const els = [box("a", 0, 0), box("b", 400, 0),
+    arrow("ok", 100, 30, [[0, 0], [300, 0]], { startBinding: { elementId: "a" }, endBinding: { elementId: "b" } }),
+    arrow("bad", -500, -500, [[0, 0], [60, 0]], { startBinding: { elementId: "a" }, endBinding: { elementId: "b" } })];
+  assert.deepEqual(rules(els, { rules: ["misrouted-arrow"] }), [["misrouted-arrow", "bad", "a"], ["misrouted-arrow", "bad", "b"]]);
+});
+
+test("stray: something outside frames far from everything else", () => {
+  const els = [frame("f", 0, 0, 800, 600), box("a", 10, 10, { frameId: "f" }), box("near", 900, 0), box("lost", 5000, 5000)];
+  assert.deepEqual(rules(els, { rules: ["stray"] }), [["stray", "lost"]]);
+  // A group is one object: alone on a page it's not stray, and far away it's reported once.
+  const g = (id, x, y) => box(id, x, y, { groupIds: ["d"] });
+  assert.deepEqual(rules([g("p", 0, 0), g("q", 0, 300), g("r", 0, 600)], { rules: ["stray"] }), []);
+  const far = lint([...els.slice(0, 3), g("p", 5000, 5000), g("q", 5000, 5300)], { rules: ["stray"] });
+  assert.deepEqual(far.map((f) => [f.rule, ...f.ids, f.group]), [["stray", "p", "d"]]);
+});
+
+test("empty-frame and crowded-frame", () => {
+  assert.deepEqual(rules([frame("f", 0, 0, 500, 500)], { rules: ["empty-frame"] }), [["empty-frame", "f"]]);
+  const full = [frame("f", 0, 0, 400, 400), box("a", 0, 0, { width: 400, height: 190, frameId: "f" }), box("b", 0, 200, { width: 400, height: 190, frameId: "f" })];
+  assert.deepEqual(rules(full, { rules: ["crowded-frame"] }), [["crowded-frame", "f"]]);
+  // A column holding a few cards counts as its cards, not the column.
+  const board = [frame("f", 0, 0, 400, 400), box("col", 0, 0, { width: 400, height: 400, frameId: "f" }), box("card", 20, 20, { frameId: "f" })];
+  assert.deepEqual(rules(board, { rules: ["crowded-frame"] }), []);
+});
+
+test("small-text: too small when a slide-shaped frame is presented; boards are left alone", () => {
+  const slide = [frame("s", 0, 0, 3200, 1800), { id: "t", type: "text", x: 10, y: 10, width: 50, height: 10, fontSize: 12, frameId: "s", text: "tiny" }];
+  assert.deepEqual(rules(slide, { rules: ["small-text"] }), [["small-text", "t"]]);
+  const board = [frame("b", 0, 0, 3000, 3000), { id: "t", type: "text", x: 10, y: 10, width: 50, height: 10, fontSize: 12, frameId: "b", text: "tiny" }];
+  assert.deepEqual(rules(board, { rules: ["small-text"] }), []);
+});
+
+test("contrast: text on its container's fill, or on the filled shape under it", () => {
+  const els = [box("a", 0, 0, { backgroundColor: "#fff9db" }), { ...label("t", "a", 10, 20, 80, 20), strokeColor: "#f08c00" },
+    box("ok", 200, 0, { backgroundColor: "#fff9db" }), { ...label("u", "ok", 210, 20, 80, 20), strokeColor: "#1e1e1e" },
+    box("col", 400, 0, { width: 300, height: 300, backgroundColor: "#f8f9fa" }), { id: "h", type: "text", x: 410, y: 10, width: 60, height: 20, text: "To do", strokeColor: "#748ffc" }];
+  assert.deepEqual(rules(els, { rules: ["contrast"] }), [["contrast", "a"], ["contrast", "h", "col"]]);
+});
+
+test("unframed: wholly inside a frame without being in it; a label in another frame than its shape", () => {
+  const els = [frame("f", 0, 0, 800, 600), box("in", 10, 10, { frameId: "f" }), box("lost", 200, 200), box("half", 750, 10),
+    box("c", 400, 10, { frameId: "f" }), label("l", "c", 410, 20, 80, 20)];
+  assert.deepEqual(rules(els, { rules: ["unframed"] }), [["unframed", "lost", "f"], ["unframed", "c", "l"]]);
 });

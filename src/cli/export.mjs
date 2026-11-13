@@ -33,17 +33,17 @@ export async function runExport(plan, client, note, env, cwd) {
   }
   if (result.files) {
     fs.mkdirSync(out, { recursive: true });
+    // File names inside --out: the agent didn't choose them. Nothing else echoes the call.
     const files = result.files.map((f) => {
-      const file = path.join(out, f.name);
-      fs.writeFileSync(file, f.data);
-      return { file, frame: f.frame, title: f.title, width: f.width, height: f.height };
+      fs.writeFileSync(path.join(out, f.name), f.data);
+      return { file: f.name, frame: f.frame, width: f.width, height: f.height };
     });
-    return { format: fmt, out, files };
+    return { files };
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, result.file.data);
-  if (result.summary) return { format: fmt, out, ...result.summary };
-  return { format: fmt, out, page: plan.page, frame: flags.frame ?? null, width: result.file.width, height: result.file.height };
+  if (result.summary) return { ...result.summary };
+  return { width: result.file.width, height: result.file.height };
 }
 
 /** The image options `export` passes to the renderer. */

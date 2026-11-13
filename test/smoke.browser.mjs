@@ -168,9 +168,14 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   await S.page.goto(u.href);
   const patched = await patching;
   assert.equal(patched.code, 0, patched.stdout + patched.stderr);
-  assert.equal(patched.json.id, "cli:patch");
-  for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(patched.json.result.created.includes(id), `created ${id}`);
+  assert.equal(patched.json.id, undefined, "no id in the envelope");
+  // A short response: counts, not an echo of what was sent.
+  assert.ok(patched.json.result.created >= 9 && Number.isInteger(patched.json.result.changed), JSON.stringify(patched.json.result));
+  const made = new Set((await cli(["get", "board"])).json.result.elements.map((e) => e.id));
+  for (const id of ["f1", "n1", "n2", "n3", "n4", "a1", "go", "f2", "n5"]) assert.ok(made.has(id), `created ${id}`);
   assert.equal(patched.json.result.createdPage, true);
+  // Thin: only what the agent acts on (test/responses.test.mjs covers the commands that need no tab).
+  assert.deepEqual(Object.keys(patched.json.result).filter((k) => !["rev", "createdPage", "created", "changed", "warnings", "fixes"].includes(k)), []);
 
   // Moving a labelled note with an edit moves its label too.
   const before = (await T("elements")).find((e) => e.containerId === "n5");
@@ -243,7 +248,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   });
 
   // 3. `changes --source user` reports exactly those four, with the right pointsAt.
-  const changes = async () => (await cli(["changes", "board", "--source", "user"])).json.result.changes;
+  const changes = async () => (await cli(["changes", "board", "--since", "0"])).json.result.changes; // the person's, by default
   try {
     await until(async () => (await changes()).length >= 4, { what: "four user changes" });
   } catch (err) {
@@ -272,7 +277,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.deepEqual(sticky.pointsAt?.map((p) => p.id), ["n3"]);
   assert.equal(pen.op, "added");
   assert.deepEqual(pen.pointsAt?.map((p) => p.id), ["n4"]);
-  for (const c of all) assert.equal(c.source, "user");
+  for (const c of all) assert.equal(c.source, undefined, "brief: no source when only the person's are asked for");
 
   // --since last: everything once, then nothing.
   assert.equal((await cli(["changes", "board", "--since", "last", "--source", "user"])).json.result.changes.length, 4);
@@ -284,7 +289,21 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.equal(shot.code, 0, shot.stdout);
   assert.deepEqual([...fs.readFileSync(png).subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(shot.json.result.width > 200 && shot.json.result.height > 100);
-  assert.equal(shot.json.result.renderer, "tab");
+  assert.deepEqual(Object.keys(shot.json.result), ["width", "height"], "no echo of page, frame or --out");
+  // --around crops to some elements plus a margin: much smaller than their frame.
+  const near = await cli(["shot", "board", "--around", "n1,n2", "--out", path.join(S.tmp, "shots", "near.png")]);
+  assert.equal(near.code, 0, near.stdout);
+  assert.ok(near.json.result.width > 400 && near.json.result.width < shot.json.result.width, `around: ${near.json.result.width} vs frame ${shot.json.result.width}`);
+  assert.ok(near.json.result.height > 200 && near.json.result.height < shot.json.result.height);
+  // Ids spread across most of a frame: the frame itself, and the result says so.
+  const wide = await cli(["shot", "board", "--around", "n1,n3,go", "--out", path.join(S.tmp, "shots", "wide.png")]);
+  assert.equal(wide.json.result.widenedTo, "f1", wide.stdout);
+  assert.equal(near.json.result.widenedTo, undefined, "n1,n2 stays a crop");
+  // Uncapped with an explicit --scale; capped otherwise.
+  const big = await cli(["shot", "board", "--scale", "3", "--out", path.join(S.tmp, "shots", "big.png")]);
+  const capped = await cli(["shot", "board", "--out", path.join(S.tmp, "shots", "capped.png")]);
+  assert.ok(capped.json.result.width <= 1568 && capped.json.result.width * capped.json.result.height <= 1.16e6, JSON.stringify(capped.json.result));
+  assert.ok(big.json.result.width > capped.json.result.width);
 
   // 5. Present starts at the first frame in slide order, even when the view is on another one.
   await S.page.keyboard.press("Escape"); // nothing selected
@@ -367,13 +386,13 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.equal((await cli(["changes", "board", "--since", "last", "--source", "user"])).json.result.changes.length, 0);
 
   // 6. stop saves everything; the log survives a restart.
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   const saved = JSON.parse(fs.readFileSync(path.join(S.tmp, "canvas", "board.excalidraw"), "utf8"));
   const live = saved.elements.filter((e) => !e.isDeleted);
   assert.ok(Math.abs(live.find((e) => e.id === "n1").y - (n1.y + 300)) <= 3);
   assert.ok(live.some((e) => e.type === "ellipse") && live.some((e) => e.type === "freedraw"));
   assert.ok(live.some((e) => e.type === "text" && e.text === "Needs SSO"));
-  const restarted = await cli(["changes", "board", "--source", "user"]); // starts the server again
+  const restarted = await cli(["changes", "board", "--since", "0"]); // starts the server again
   assert.equal(restarted.json.result.changes.length, 4);
   assert.equal(fs.readdirSync(path.join(S.tmp, "canvas")).filter((f) => !f.startsWith(".")).join(","), "board.excalidraw");
   // The open tab survives the restart: it reconnects by itself, no new link.
@@ -384,7 +403,7 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   // Patches no longer refit the view, so point it at n2's frame before dragging.
   assert.equal((await cli(["show", "board", "--frame", "f1"])).code, 0);
   await sleep(300);
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   await until(async () => (await T("connection")) === "away", { what: "the tab knows the server is away" });
   const n2 = await el("n2");
   await drag(center(n2), [n2.x + n2.width / 2, n2.y + n2.height / 2 + 150]);
@@ -455,7 +474,7 @@ test("concurrency: the person drags while agent patches land; nothing is misattr
 
   // Let the last sync land, then compare.
   await sleep(1200);
-  const all = (await cli(["changes", "board", "--since", String(start)])).json.result.changes;
+  const all = (await cli(["changes", "board", "--since", String(start), "--source", "all"])).json.result.changes;
   const user = all.filter((c) => c.source === "user");
   const byAgent = all.filter((c) => c.source === "agent");
   assert.ok(user.length >= 1, "the person's drags were recorded");
@@ -563,7 +582,7 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   const pngs = await cli(["export", "board", "--format", "png", "--frames", "--out", path.join(out, "frames")]);
   assert.equal(pngs.code, 0, pngs.stdout);
   assert.deepEqual(fs.readdirSync(path.join(out, "frames")).sort(), ["01-board.png", "02-next.png"]);
-  for (const f of pngs.json.result.files) assert.equal(fs.readFileSync(f.file).subarray(1, 4).toString(), "PNG");
+  for (const f of pngs.json.result.files) assert.equal(fs.readFileSync(path.join(out, "frames", f.file)).subarray(1, 4).toString(), "PNG");
 
   // HTML deck: works offline, makes no requests, hotspots and keys navigate.
   const deckFile = path.join(out, "deck.html");
@@ -598,7 +617,7 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   await until(async () => (await cli(["status"])).json.result.browsers === 0, { what: "no tabs" });
   const headless = await cli(["export", "board", "--format", "svg", "--frame", "f2", "--out", path.join(out, "f2.svg")]);
   assert.equal(headless.code, 0, headless.stdout + headless.stderr);
-  assert.match(headless.stderr, /headless Chrome/);
+  assert.equal(headless.stderr, "", "no progress lines");
   assert.ok(fs.readFileSync(path.join(out, "f2.svg"), "utf8").startsWith("<svg"));
   const after = (await cli(["status"])).json.result;
   assert.equal(after.browsers, 0);
@@ -607,7 +626,6 @@ test("export: svg, png per frame, a self-contained html deck, pdf; with and with
   const links = fs.readFileSync(S.opened, "utf8").trim().split("\n").length;
   const quiet = await cli(["shot", "board", "--frame", "f2", "--out", path.join(out, "shot-f2.png")]);
   assert.equal(quiet.code, 0, quiet.stdout + quiet.stderr);
-  assert.equal(quiet.json.result.renderer, "headless");
   assert.equal(fs.readFileSync(S.opened, "utf8").trim().split("\n").length, links, "no browser tab opened");
   assert.equal(fs.readFileSync(S.opened, "utf8").trim().split("\n").length >= 1, true);
 });
@@ -626,12 +644,9 @@ test("library: insert downloads on demand and opens a tab; predictable ids; fram
   await page.goto(u.href);
   const r = await inserting;
   assert.equal(r.code, 0, r.stdout + r.stderr);
-  assert.match(r.stderr, /downloaded shapes\.acme/);
-  const { ids, created, item, library } = r.json.result;
-  assert.equal(item, "shapes.acme/database");
-  assert.deepEqual(library.authors, ["Acme Example"]);
-  assert.deepEqual(ids, ["db-1", "db-2"]);
-  for (const id of ids) assert.ok(created.includes(id));
+  // The ids it made and the rev: no echo of the item, the library or the change log.
+  assert.deepEqual(Object.keys(r.json.result), ["rev", "ids"]);
+  assert.deepEqual(r.json.result.ids, ["db-1", "db-2"]);
 
   const els = (await cli(["get", "board"])).json.result.elements.filter((e) => e.id.startsWith("db-"));
   assert.deepEqual(els.map((e) => [e.id, e.x, e.y, e.text]), [["db-1", 100, 800, "DB"]], "label folded into its box, placed at --at");
@@ -747,7 +762,7 @@ test("undo of an agent patch, and an image dropped by the person: synced, saved,
   assert.equal((await cli(["export", "board", "--format", "svg", "--out", svgOut])).code, 0);
   assert.ok(fs.readFileSync(svgOut, "utf8").includes("data:image/png;base64,"), "image embedded in the export");
   await page.close();
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   const saved = JSON.parse(fs.readFileSync(path.join(S.tmp, "canvas", "board.excalidraw"), "utf8"));
   const savedImg = saved.elements.find((e) => e.id === img.id);
   assert.ok(savedImg && !savedImg.isDeleted);
@@ -986,7 +1001,8 @@ test("late layout: the editor's change to a patched element right after the patc
   await A.goto(u.href);
   await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
   const T = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
-  const last = async (id) => (await cli(["changes", "board"])).json.result.changes.filter((c) => c.id === id).at(-1);
+  // The full log (revisions, sources), not the brief one agents read.
+  const last = async (id) => (await (await fetch(`http://127.0.0.1:${S.port}/api/pages/board/changes?since=0`)).json()).changes.filter((c) => c.id === id).at(-1);
   const points = [[0, 0], [7, 6], [14, -1], [0, 0]];
   const r = await cli(["patch", "board", "--file", "-"], { stdin: JSON.stringify({ elements: [{ id: "tick", type: "line", x: 40, y: 940, points }] }) });
   assert.equal(r.code, 0, r.stdout);
@@ -1110,7 +1126,8 @@ test("branding: the tab title and favicon, the mark in the pill, About obeya", {
     ["menu-new-page", "menu-pages", "menu-rename", "menu-export", "menu-present", "menu-about"]);
   await A.click('[data-testid="menu-about"]');
   await A.waitForSelector('[data-testid="about-dialog"]');
-  await until(() => A.evaluate(() => document.querySelector('[data-testid="about-version"]')?.textContent === "0.1.0"), { what: "About shows the version" });
+  const { version } = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  await until(() => A.evaluate((v) => document.querySelector('[data-testid="about-version"]')?.textContent === v, version), { what: "About shows the version" });
   assert.ok(await A.evaluate(() => document.querySelector(".xl-lockup")?.naturalWidth > 0), "the lockup loads");
   assert.match(await A.textContent('[data-testid="about-dialog"]'), /obeya --skill/);
   // One dialog at a time: the page picker's and export's shortcuts do nothing while About is open.
@@ -1183,7 +1200,7 @@ test("the port comes back serving another folder: the tab stops and asks for a r
   await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
   const state = () => A.evaluate(() => window.obeyaTest.connection());
   await until(async () => (await state()) === "connected", { what: "connected" });
-  assert.equal((await cli(["stop"])).json.result.stopped, true);
+  assert.equal((await cli(["stop"])).stdout, "");
   await until(async () => (await state()) === "away", { what: "away" });
   const other = path.join(S.tmp, "other-canvas");
   const env = S.env;
@@ -1192,7 +1209,7 @@ test("the port comes back serving another folder: the tab stops and asks for a r
     assert.equal((await cli(["pages"])).code, 0); // a server for another folder, same port
     await until(async () => (await state()) === "wrong-folder", { what: "the tab sees another folder", timeout: 20000 });
     assert.match(await A.textContent("#notice-text"), /different folder/);
-    assert.equal((await cli(["stop"])).json.result.stopped, true);
+    assert.equal((await cli(["stop"])).stdout, "");
   } finally {
     S.env = env;
   }
@@ -1282,7 +1299,7 @@ test("folders: the picker by folder, New page into a folder, moving, a link into
   await until(async () => (await T("page")) === "project-b/kickoff", { what: "the tab follows the move" });
   assert.ok(onDisk("project-b/kickoff.excalidraw") && !onDisk("project-c"), "moved; the empty folder is gone");
   assert.ok(onDisk(".obeya/project-b/kickoff.changes.jsonl"), "the change log moved too");
-  assert.equal((await cli(["changes", "project-b/kickoff"])).json.result.changes[0].id, "k1");
+  assert.equal((await cli(["changes", "project-b/kickoff", "--since", "0", "--source", "all"])).json.result.changes[0].id, "k1");
 
   // A link into a folder opens that page.
   const link = new URL(u.href);
@@ -1327,7 +1344,7 @@ test("images: an agent patches an image in by path; it is drawn, saved inside th
   await sleep(400);
   const r = await cli(["patch", "pictures", "--file", "-"], { stdin: JSON.stringify({ skeleton: [{ type: "image", id: "pic", src: pic, x: 100, y: 100, width: 200, height: 120 }] }) });
   assert.equal(r.code, 0, r.stdout);
-  assert.deepEqual(r.json.result.created, ["pic"]);
+  assert.equal(r.json.result.created, 1);
   const el = (await T(A, "elements")).find((e) => e.id === "pic");
   assert.equal(el.type, "image");
   assert.ok((await T(A, "files")).includes(el.fileId), "tab A has the file");
@@ -1343,4 +1360,282 @@ test("images: an agent patches an image in by path; it is drawn, saved inside th
   assert.equal((await cli(["export", "pictures", "--format", "svg", "--out", svg])).code, 0);
   assert.ok(fs.readFileSync(svg, "utf8").includes("data:image/png;base64,"));
   for (const t of tabs) await t.close();
+});
+
+test("wait: the ask shows on that page's tab only (other tabs count it in the pill), the frame outlined; Done returns the person's changes", { skip }, async () => {
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const open = async (page) => {
+    const v = new URL(u.href);
+    v.searchParams.set("page", page);
+    const t = await S.context.newPage();
+    await t.setViewportSize({ width: 1600, height: 1000 });
+    await t.goto(v.href);
+    await until(() => t.evaluate(() => window.obeyaTest?.ready()), { what: `tab on ${page} ready`, timeout: 60000 });
+    return t;
+  };
+  const A = await open("board");
+  await A.mouse.click(1500, 900);
+  assert.equal((await cli(["patch", "wait-other", "--file", "-"], { stdin: JSON.stringify({ skeleton: [{ type: "rectangle", id: "o1", x: 0, y: 0, width: 80, height: 40 }] }) })).code, 0);
+  const B = await open("wait-other");
+  await cli(["changes", "board"]); // the agent is up to date
+  await A.bringToFront();
+
+  const waiting = cli(["wait", "board", "--ask", "Move the first note, then press Done", "--frame", "f1"]);
+  await A.waitForSelector('[data-testid="wait-banner"]', { timeout: 10000 });
+  assert.equal(await A.textContent('[data-testid="wait-ask"]'), "Move the first note, then press Done");
+  assert.ok(await A.isVisible('[data-testid="wait-frame"]'), "the frame is outlined");
+  assert.match(await A.title(), /^● obeya - board$/);
+  // It follows the editor's theme: Excalidraw's own toggle (Shift+Alt+D), and back.
+  const bannerBg = () => A.evaluate(() => getComputedStyle(document.querySelector(".xl-wait")).backgroundColor);
+  const light = await bannerBg();
+  await A.keyboard.press("Alt+Shift+KeyD");
+  await until(async () => (await bannerBg()) !== light, { what: "the banner turns dark" });
+  assert.equal(await bannerBg(), "rgb(35, 35, 41)");
+  await A.keyboard.press("Alt+Shift+KeyD");
+  await until(async () => (await bannerBg()) === light, { what: "and light again" });
+  await until(async () => /^obeya - wait-other$/.test(await B.title()), { what: "the other tab's title is unmarked" });
+  assert.equal(await B.$('[data-testid="wait-banner"]'), null, "no banner on another page");
+  assert.equal(await B.textContent('[data-testid="pill-waiting"]'), "(1 waiting)", "the other tab's page pill counts it");
+  assert.equal(await B.evaluate(() => window.obeyaTest.page()), "wait-other", "nothing switched the other tab");
+
+  // The person drags something, then presses Done.
+  const TA = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
+  const n1 = (await TA("elements")).find((e) => e.id === "n1");
+  const p = await TA("toClient", n1.x + 30, n1.y + 30);
+  await A.mouse.move(p.x, p.y);
+  await A.mouse.down();
+  for (let i = 1; i <= 10; i++) await A.mouse.move(p.x + i * 6, p.y + i * 3);
+  await A.mouse.up();
+  await A.click('[data-testid="wait-done"]');
+  const r = await waiting;
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.equal(r.json.result.done, "button");
+  // Whatever is on top there (an earlier test drops an image over the note) moved: the person's change comes back.
+  assert.ok(r.json.result.changes.some((c) => c.moved), JSON.stringify(r.json.result.changes));
+  assert.doesNotMatch(r.stderr, /no tab shows/, "a tab showed the page: no link needed");
+  await until(async () => !(await A.$('[data-testid="wait-banner"]')), { what: "the banner goes" });
+  await until(async () => !(await B.$('[data-testid="pill-waiting"]')), { what: "the pill count goes" });
+  assert.match(await A.title(), /^obeya - board$/);
+  await A.close();
+  await B.close();
+});
+
+test("re-applying a skeleton to reword a label keeps the element's frame, group, style, link, data and label font", { skip }, async () => {
+  const opened = await cli(["open", "reskel", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "reskel", "--file", "-"], { stdin: JSON.stringify(p) });
+  let r = await patch({ skeleton: [
+    { type: "frame", id: "rf", x: 0, y: 0, width: 800, height: 500, name: "Column", children: ["card"] },
+    { type: "stickynote", id: "card", x: 40, y: 60, width: 260, backgroundColor: "#a5d8ff", link: "https://example.com/card", customData: { kind: "roadmap-card", rank: 3 }, groupIds: ["g-card"], label: { text: "Old wording", fontSize: 16 } },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  // The guide's way to reword a label: the same skeleton id, a new label, nothing else.
+  r = await patch({ skeleton: [{ type: "stickynote", id: "card", x: 40, y: 60, width: 260, label: { text: "New wording that is a good deal longer than the old one" } }] });
+  assert.equal(r.code, 0, r.stdout);
+  assert.deepEqual(r.json.result.warnings, [], "nothing sticks out of the frame");
+  const els = (await cli(["get", "reskel", "--full"])).json.result.elements;
+  const card = els.find((e) => e.id === "card"), label = els.find((e) => e.containerId === "card");
+  assert.equal(card.frameId, "rf", "still in its frame");
+  assert.deepEqual([card.backgroundColor, card.link, card.customData, card.groupIds], ["#a5d8ff", "https://example.com/card", { kind: "roadmap-card", rank: 3 }, ["g-card"]]);
+  assert.equal(label.text.replace(/\n/g, " "), "New wording that is a good deal longer than the old one");
+  assert.equal(label.fontSize, 16, "the label keeps its size");
+  assert.equal(label.frameId, "rf", "the new label is in the frame too");
+  assert.equal(els.filter((e) => e.containerId === "card").length, 1, "one label, no orphan");
+  // A skeleton that says otherwise still wins.
+  r = await patch({ skeleton: [{ type: "stickynote", id: "card", x: 40, y: 60, width: 260, backgroundColor: "#ffc9c9", label: { text: "Red now", fontSize: 20 } }] });
+  const after = (await cli(["get", "reskel", "--full"])).json.result.elements;
+  assert.equal(after.find((e) => e.id === "card").backgroundColor, "#ffc9c9");
+  assert.equal(after.find((e) => e.containerId === "card").fontSize, 20);
+  await A.close();
+});
+
+test("frames by position: a new element inside a frame joins it, an edit moves it in or out; a patch that says where wins", { skip }, async () => {
+  const opened = await cli(["open", "framepos", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "framepos", "--file", "-"], { stdin: JSON.stringify(p) });
+  const frameOf = async () => Object.fromEntries((await cli(["get", "framepos", "--full"])).json.result.elements.map((e) => [e.id, e.frameId ?? null]));
+  let r = await patch({ skeleton: [
+    { type: "frame", id: "fa", x: 0, y: 0, width: 800, height: 600, name: "A" },
+    { type: "frame", id: "fb", x: 1000, y: 0, width: 800, height: 600, name: "B" },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  // Later patches, no frameId and no children: the way agents usually add things.
+  r = await patch({ skeleton: [
+    { type: "rectangle", id: "box", x: 40, y: 60, width: 200, height: 100, label: { text: "In A" } },
+    { type: "rectangle", id: "half", x: 700, y: 60, width: 200, height: 100 },
+    { type: "rectangle", id: "free", x: 40, y: 800, width: 200, height: 100 },
+    { type: "rectangle", id: "mine", x: 300, y: 60, width: 200, height: 100, frameId: null },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  let f = await frameOf();
+  const label = (await cli(["get", "framepos", "--full"])).json.result.elements.find((e) => e.containerId === "box");
+  assert.deepEqual([f.box, label.frameId, f.half, f.free, f.mine], ["fa", "fa", null, null, null], "inside joins, sticking out or outside doesn't, frameId: null is respected");
+  // A deleted element brought back by a new skeleton with the same id is new again: it joins too.
+  await patch({ delete: ["half"] });
+  r = await patch({ skeleton: [{ type: "rectangle", id: "half", x: 300, y: 300, width: 200, height: 100 }] });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await frameOf()).half, "fa", "a re-created element joins by position");
+  // An edit moves it into B, then out of every frame.
+  await patch({ elements: [{ id: "box", x: 1040, y: 60 }] });
+  f = await frameOf();
+  assert.equal(f.box, "fb");
+  await patch({ elements: [{ id: "box", x: 400, y: 800 }] });
+  f = await frameOf();
+  assert.equal(f.box, null);
+  // An edit that says its frame wins over position, and the label goes with its shape.
+  await patch({ skeleton: [{ type: "rectangle", id: "free", x: 40, y: 800, width: 200, height: 100, label: { text: "Free" } }] });
+  await patch({ elements: [{ id: "free", frameId: "fb" }] });
+  f = await frameOf();
+  assert.equal(f.free, "fb");
+  const freeLabel = (await cli(["get", "framepos", "--full"])).json.result.elements.find((e) => e.containerId === "free");
+  assert.equal(freeLabel.frameId, "fb", "the label follows its shape into the frame");
+  assert.equal((await cli(["lint", "framepos", "--rule", "outside-frame,overlap"])).json.result.findings.filter((x) => x.ids.includes("box")).length, 0);
+  await A.close();
+});
+
+test("an empty frame keeps the box it was given; defaults give new elements the page's base style", { skip }, async () => {
+  const opened = await cli(["open", "defaults", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "defaults", "--file", "-"], { stdin: JSON.stringify(p) });
+  let r = await patch({
+    defaults: { rectangle: { backgroundColor: "#d3f9d8", fillStyle: "hachure" }, label: { fontSize: 14 } },
+    skeleton: [
+      { type: "frame", id: "art", x: 0, y: 0, width: 1600, height: 900, name: "01 Artboard" },
+      { type: "rectangle", id: "a", x: 40, y: 40, width: 200, height: 100, label: { text: "Base style" } },
+      { type: "rectangle", id: "b", x: 300, y: 40, width: 200, height: 100, backgroundColor: "#ffc9c9", label: { text: "Its own fill", fontSize: 20 } },
+    ],
+  });
+  assert.equal(r.code, 0, r.stdout);
+  let els = (await cli(["get", "defaults", "--full"])).json.result.elements;
+  const art = els.find((e) => e.id === "art");
+  assert.deepEqual([art.x, art.y, art.width, art.height], [0, 0, 1600, 900], "the frame's box as given");
+  const byId = (id) => els.find((e) => e.id === id), labelOf = (id) => els.find((e) => e.containerId === id);
+  assert.deepEqual([byId("a").backgroundColor, byId("a").fillStyle, labelOf("a").fontSize], ["#d3f9d8", "hachure", 14]);
+  assert.deepEqual([byId("b").backgroundColor, labelOf("b").fontSize], ["#ffc9c9", 20], "an element's own fields win");
+  assert.equal(byId("a").frameId, "art", "joined the frame by position");
+  // Re-applying a skeleton with defaults doesn't restyle what's there.
+  r = await patch({ defaults: { rectangle: { backgroundColor: "#a5d8ff" } }, skeleton: [{ type: "rectangle", id: "a", x: 40, y: 40, width: 200, height: 100, label: { text: "Reworded" } }] });
+  assert.equal(r.code, 0, r.stdout);
+  els = (await cli(["get", "defaults", "--full"])).json.result.elements;
+  assert.equal(byId("a").backgroundColor, "#d3f9d8");
+  // Bad defaults are refused before anything changes.
+  r = await patch({ defaults: { rectangle: "solid" }, skeleton: [] });
+  assert.equal(r.json.error.code, "invalid_patch");
+  await A.close();
+});
+
+test("navigation: Back and Forward move between pages; picker rows are links (new tab); long folders shrink in the pill", { skip }, async () => {
+  const dir = path.join(S.tmp, "canvas");
+  const empty = JSON.stringify({ type: "excalidraw", version: 2, elements: [], appState: {}, files: {} });
+  const deep = "a-rather-long-folder/another-long-folder/a-fairly-long-page-name";
+  for (const n of ["nav-a", "nav-b", deep]) {
+    fs.mkdirSync(path.dirname(path.join(dir, n)), { recursive: true });
+    fs.writeFileSync(path.join(dir, `${n}.excalidraw`), empty);
+  }
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const T = (fn, ...args) => A.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
+  const onPage = (name, what) => until(async () => (await T("page")) === name && new URL(A.url()).searchParams.get("page") === name, { what });
+  const row = (name) => `[data-testid=picker-row][data-name="${name}"]`;
+
+  // A plain click on a picker row opens the page here.
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector(row("nav-a"));
+  assert.equal(await A.getAttribute(row("nav-a"), "href"), "?page=nav-a", "a real link");
+  await A.click(row("nav-a"));
+  await onPage("nav-a", "a click opens nav-a here");
+
+  // Cmd/Ctrl-click opens it in a new tab and leaves this one where it is.
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector(row("nav-b"));
+  const [other] = await Promise.all([S.context.waitForEvent("page"), A.click(row("nav-b"), { modifiers: ["ControlOrMeta"] })]);
+  await until(() => other.url().includes("page=nav-b"), { what: "the new tab opens nav-b" });
+  await other.close();
+  await A.keyboard.press("Escape");
+  assert.equal(await T("page"), "nav-a", "this tab stays");
+
+  // An agent's show is an entry too; then Back and Forward walk them.
+  assert.equal((await cli(["show", deep])).code, 0);
+  await onPage(deep, "show opens the deep page");
+  await A.goBack();
+  await onPage("nav-a", "Back: nav-a");
+  await A.goBack();
+  await onPage("board", "Back: board");
+  await A.goForward();
+  await onPage("nav-a", "Forward: nav-a");
+  await A.goForward();
+  await onPage(deep, "Forward: the deep page");
+
+  // The pill: the folders shrink to a character each before the page name is cut; the tooltip has it whole.
+  await until(async () => (await A.textContent("[data-testid=pill-folder]")) === "a / a / ", { what: "short folders in the pill" });
+  assert.equal(await A.textContent("[data-testid=pill-name]"), "a-fairly-long-page-name");
+  assert.match(await A.getAttribute("[data-testid=page-pill]", "title"), new RegExp(`^${deep} · `));
+  await A.close();
+});
+
+test("mermaid: a flowchart as editable elements with stable ids; re-running replaces it in place; other types as an image", { skip }, async () => {
+  const opened = await cli(["open", "mm", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const flow = "flowchart TD\n A[Christmas] -->|Get money| B(Go shopping)\n B --> C{Let me think}\n";
+  let r = await cli(["mermaid", "mm", "--file", "-", "--id", "x", "--at", "100,200"], { stdin: flow });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.deepEqual(Object.keys(r.json.result).filter((k) => !["rev", "createdPage", "created", "removed", "warnings", "fixes", "image"].includes(k)), []);
+  assert.equal(r.json.result.removed, 0);
+  const els = async () => (await cli(["get", "mm"])).json.result.elements.filter((e) => e.id.startsWith("x-"));
+  const first = await els();
+  assert.deepEqual(first.map((e) => e.id).sort(), ["x-A", "x-A_B", "x-B", "x-B_C", "x-C"]);
+  assert.equal(first.find((e) => e.id === "x-C").type, "diamond");
+  assert.equal(first.find((e) => e.id === "x-A").text, "Christmas");
+  assert.equal(Math.min(...first.map((e) => e.x)), 100);
+  assert.ok(first.every((e) => e.groups?.includes("x")), "one group");
+
+  // Again, with a node renamed and one removed: replaced, where it was.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "x"], { stdin: "flowchart TD\n A[Holidays] --> B(Go shopping)\n" });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.result.removed, 5);
+  const second = await els();
+  assert.deepEqual(second.map((e) => e.id).sort(), ["x-A", "x-A_B", "x-B"]);
+  assert.equal(second.find((e) => e.id === "x-A").text, "Holidays");
+  assert.equal(Math.min(...second.map((e) => e.x)), 100, "the same place");
+
+  // A type the converter can't draw as elements: one image.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "pets"], { stdin: 'pie title Pets\n "Dogs" : 386\n "Cats" : 85\n' });
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.result.image, true);
+  assert.equal((await cli(["get", "mm"])).json.result.elements.find((e) => e.id === "pets-m1")?.type, "image");
+
+  // A syntax error changes nothing.
+  r = await cli(["mermaid", "mm", "--file", "-", "--id", "bad"], { stdin: "flowchart TD\n A[x] -->> B(\n" });
+  assert.equal(r.json.error.code, "invalid_mermaid", r.stdout);
+  assert.ok(!(await cli(["get", "mm"])).json.result.elements.some((e) => e.id.startsWith("bad-")));
+  await A.close();
 });

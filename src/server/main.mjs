@@ -19,6 +19,7 @@ import { normalizePageName, validPageName } from "../lib/names.mjs";
 import { DEFAULT_IDLE_MINUTES } from "../lib/commands.mjs";
 import { ApiError, json, router, sendFile } from "./http.mjs";
 import { createTabs } from "./tabs.mjs";
+import { createWaits } from "./waits.mjs";
 import { watchPages } from "./watch.mjs";
 import { pageRoutes } from "./routes/pages.mjs";
 import { renderRoutes } from "./routes/render.mjs";
@@ -49,10 +50,12 @@ let lastActivity = Date.now();
 const store = new PageStore(DIR, { onNewPage: () => pages.announce() });
 const tabs = createTabs({ store, dir: DIR, onClose: () => (lastActivity = Date.now()) });
 const pages = watchPages({ dir: DIR, store, broadcast: tabs.broadcast });
+const waits = createWaits({ store, tabs, onEnd: () => (lastActivity = Date.now()) });
+tabs.greet(() => [["waits", { waits: waits.list() }]]); // a tab that connects learns who is waiting
 
 const route = router([
   ...infoRoutes({ tabs, dir: DIR, port: PORT, version: VERSION, idleMinutes: IDLE_MINUTES, shutdown: () => shutdown() }),
-  ...pageRoutes({ store, tabs, pages }),
+  ...pageRoutes({ store, tabs, pages, waits }),
   ...renderRoutes({ store, tabs, dir: DIR }),
 ]);
 
@@ -109,6 +112,7 @@ function shutdown() {
   stopping = true;
   try {
     store.flush();
+    waits.stopAll();
   } finally {
     tabs.closeAll();
     server.close(() => process.exit(0));
@@ -120,7 +124,7 @@ function shutdown() {
 if (IDLE_MINUTES > 0) {
   const idleMs = IDLE_MINUTES * 60000;
   setInterval(() => {
-    if (!tabs.size && !tabs.waiting && Date.now() - lastActivity >= idleMs) {
+    if (!tabs.size && !tabs.waiting && !waits.size && Date.now() - lastActivity >= idleMs) {
       console.log(`${new Date().toISOString()} idle for ${IDLE_MINUTES} min; stopping`);
       shutdown();
     }

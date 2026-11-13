@@ -7,7 +7,9 @@ import { CONNECTION } from "/lib/page-machines.mjs";
 import { applyRemote, flushSync, setOnline } from "./sync.mjs";
 import { queuePatch } from "./patch.mjs";
 import { handleExport, handleLibrarySheet, handleShow, loadLibraries } from "./render.mjs";
+import { handleMermaid } from "./mermaid.mjs";
 import { forgetPage, openPage, recentPages, rememberPage } from "./pages.mjs";
+import { setTitle, setWaits } from "./ui/wait-banner.mjs";
 
 export function notice(html) {
   document.getElementById("notice-text").innerHTML = html;
@@ -58,14 +60,16 @@ export function connectEvents() {
   const q = new URLSearchParams({ tab: TAB_ID });
   if (S.currentPage) q.set("page", S.currentPage);
   if (RENDERER) q.set("renderer", "1");
-  q.set("caps", "layout"); // what this page's code can do; a tab opened before an upgrade lacks it
+  q.set("caps", "layout,mermaid"); // what this page's code can do; a tab opened before an upgrade lacks it
   const events = new EventSource(`/events?${q}`);
   events.addEventListener("remote-elements", (e) => applyRemote(JSON.parse(e.data)));
   events.addEventListener("agent-patch", (e) => queuePatch(JSON.parse(e.data)));
   events.addEventListener("show", (e) => handleShow(JSON.parse(e.data)));
   events.addEventListener("export", (e) => handleExport(JSON.parse(e.data)));
   events.addEventListener("library-sheet", (e) => handleLibrarySheet(JSON.parse(e.data)));
+  events.addEventListener("mermaid", (e) => handleMermaid(JSON.parse(e.data)));
   events.addEventListener("libraries-changed", () => loadLibraries());
+  events.addEventListener("waits", (e) => setWaits(JSON.parse(e.data).waits));
   events.addEventListener("pages", (e) => {
     const { pages, skipped } = JSON.parse(e.data);
     S.setUi((s) => ({ ...s, pages, skipped }));
@@ -77,7 +81,7 @@ export function connectEvents() {
     const u = new URL(location.href);
     u.searchParams.set("page", to);
     history.replaceState(null, "", u.pathname + u.search);
-    document.title = `obeya - ${to}`;
+    setTitle();
     rememberPage(to);
     S.setUi((s) => ({ ...s, page: to }));
   });

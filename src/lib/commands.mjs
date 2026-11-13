@@ -1,6 +1,7 @@
 // The command table. It drives argument validation and every help screen, so
 // the help text can't drift from what the parser accepts.
 import { normalizePageName, validPageName } from "./names.mjs";
+import { RULES } from "./lint.mjs";
 
 export const DEFAULT_PORT = 4747;
 export const DEFAULT_DIR = "obeya";
@@ -28,8 +29,7 @@ export const COMMANDS = {
     usage: "serve",
     summary: "Start the server in the background if it isn't running",
     details: [
-      "Prints {url, dir, pid, browsers}. Other commands start the server on their own, so this is rarely needed.",
-      "The server stops itself after --idle-timeout minutes (default 720, 12 hours) with no tab connected and no CLI calls, saving first. 0 = never.",
+      "Other commands start the server on their own. It stops after --idle-timeout idle minutes (default 720; 0 = never).",
     ],
   },
   status: {
@@ -47,8 +47,7 @@ export const COMMANDS = {
     maxPositionals: 1,
     flags: ["frame"],
     details: [
-      "With --no-open, prints the link instead of opening a tab. Links are plain local addresses; bookmarks keep working.",
-      "If a tab is already connected, it is switched to <page> and --frame.",
+      "Switches a connected tab to <page>; with --no-open, prints the link instead.",
     ],
   },
   pages: {
@@ -57,17 +56,22 @@ export const COMMANDS = {
   },
   get: {
     usage: "get <page> [--frame <id>] [--full]",
-    summary: "Print a page's elements (compact by default, raw with --full)",
+    summary: "Print a page's elements: id, type, box, text, frame, link, data",
     page: true,
     flags: ["frame", "full"],
-    details: ["Compact form folds bound text into its container as `text`."],
+    details: [
+      "Labels are folded into their container as `text`; coordinates rounded. --full: Excalidraw's stored fields, without defaults.",
+    ],
   },
   describe: {
-    usage: "describe <page> [--format json|text]",
+    usage: "describe <page> [--frame <id>] [--layout] [--format json|text]",
     summary: "A plain-text outline: frames, then their elements with labels, IDs, links and customData",
     page: true,
-    flags: ["format"],
-    details: ["--format text prints the outline without the JSON envelope."],
+    flags: ["format", "frame", "layout"],
+    details: [
+      "--layout: each frame as rows in reading order (sizes, gaps, what sits inside what, arrows), to check an arrangement without a screenshot.",
+      "--frame <id>: one frame. --format text prints without the JSON envelope ({rev, outline} or {rev, layout}).",
+    ],
     validate(plan, bad) {
       if (plan.flags.format !== undefined && !["json", "text"].includes(plan.flags.format)) throw bad('--format must be "json" or "text"');
     },
@@ -78,53 +82,73 @@ export const COMMANDS = {
     page: true,
     flags: ["frame", "rule"],
     details: [
-      "Prints {page, rev, findings: [{rule, ids, frame, message}]}. Findings are hints; nothing is changed.",
-      "Rules: overlap, clipped-text, outside-frame, loose-arrow, near-miss, hidden. --rule keeps only those.",
-      "patch reports the same findings for the elements it touched, as `warnings`.",
+      "Prints {findings: [{rule, ids, frame?, …numbers}], fixes: {rule: fix}}. Rules: overlap, clipped-text, outside-frame,",
+      "loose-arrow, misrouted-arrow, near-miss, hidden, unframed, stray, empty-frame, crowded-frame, small-text, contrast;",
+      "--rule keeps only those. Changes nothing.",
     ],
     validate(plan, bad) {
-      const known = ["overlap", "clipped-text", "outside-frame", "loose-arrow", "near-miss", "hidden"];
+      const known = RULES;
       const unknown = (plan.flags.rule ?? "").split(",").filter((r) => r && !known.includes(r));
       if (unknown.length) throw bad(`unknown rule(s): ${unknown.join(", ")}; rules are ${known.join(", ")}`);
     },
   },
   patch: {
     usage: "patch <page> --file <path|->",
-    summary: "Apply {skeleton?, elements?, delete?, toBack?, toFront?, layout?} through the live editor",
+    summary: "Apply {skeleton?, elements?, delete?, toBack?, toFront?, layout?, defaults?} through the live editor",
     page: true,
     flags: ["file"],
     required: ["file"],
     live: true,
     mutating: true,
     details: [
-      "--file - reads the patch from stdin. --file is required; the command never waits on stdin by default.",
-      "Creates the page if it doesn't exist. The patch is one undoable step for the person.",
-      "Read created and changed IDs from the response; don't guess them.",
-      "layout: align, distribute, grid, place (the next free spot in a frame or shape) and stack directives, applied in the same undo step.",
-      "The response's warnings are lint findings (see `lint --help`) that involve what the patch touched.",
+      "--file - reads stdin. Creates the page if needed; one undo step. Prints {rev, created, changed, warnings, fixes}.",
+      "The patch format: obeya --skill patch.",
     ],
   },
+  mermaid: {
+    usage: "mermaid <page> --file <path.mmd|-> --id <prefix> [--frame <id>] [--at <x,y>]",
+    summary: "Draw a Mermaid diagram as editable elements; run it again to replace it from the .mmd",
+    page: true,
+    flags: ["file", "id", "frame", "at"],
+    required: ["file", "id"],
+    live: true,
+    mutating: true,
+    details: [
+      "Ids are <prefix>-<mermaid id> (A, A_B, …) or <prefix>-m1, …; the diagram is one group. Again with the same --id: replaced,",
+      "where it was. Flowchart, sequence, class, state, ER, gantt, quadrant, timeline: elements; other types: one image.",
+      "Default place: the earlier run, else inside --frame, else below the page. Prints {rev, created, removed, warnings, fixes, image?}.",
+    ],
+    validate(plan, bad) {
+      if (!/^[a-z0-9][a-z0-9._-]{0,47}$/i.test(plan.flags.id)) throw bad("--id is 1-48 letters, digits, . _ -");
+      if (plan.flags.at !== undefined && !/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(plan.flags.at)) throw bad("--at is x,y in scene units, e.g. --at 120,80");
+    },
+  },
   changes: {
-    usage: "changes <page> [--since <rev>|last] [--source user|agent] [--consumer <name>]",
-    summary: "What changed, with labels folded and annotations resolved (pointsAt)",
+    usage: "changes <page> [--since last|<rev>] [--source user|agent|all] [--consumer <name>]",
+    summary: "What the person changed since your last read, with labels folded and annotations resolved (pointsAt)",
     page: true,
     flags: ["since", "source", "consumer"],
     details: [
-      "--since last returns entries after this consumer's previous `--since last` read, then moves its cursor.",
-      "--consumer defaults to $OBEYA_CONSUMER or \"default\".",
+      "Defaults: --since last (then moves this consumer's cursor) --source user. --since <rev> moves nothing.",
+      "--consumer defaults to $OBEYA_CONSUMER or \"default\". Entry fields: obeya --skill changes.",
     ],
   },
   shot: {
-    usage: "shot <page> [--frame <id>] [--out <png>] [--scale <n>]",
-    summary: "Save a PNG of a page or frame",
+    usage: "shot <page> [--frame <id> | --around <id,id,…>] [--out <png>] [--scale <n>]",
+    summary: "Save a PNG of a page, a frame, or the area around some elements",
     page: true,
-    flags: ["frame", "out", "scale"],
+    flags: ["frame", "around", "out", "scale"],
+    validate(plan, bad) {
+      const { frame, around } = plan.flags;
+      if (around === undefined) return;
+      if (frame !== undefined) throw bad("use --frame or --around, not both");
+      plan.around = around.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!plan.around.length) throw bad("--around needs element ids, comma-separated");
+    },
     details: [
-      "Default --out is <dir>/.obeya/shots/<page>[-<frame>].png.",
-      "Needs no open tab and never opens one if it can avoid it: the person's tab renders if one is",
-      "connected, else a headless Chrome, else the official `excalidraw render` (@excalidraw/cli) if",
-      "installed (never installed for you), else a tab is opened (exit 2 with --no-open).",
-      "`renderer` in the result says which: tab, headless, excalidraw-cli.",
+      "--around: those elements plus a margin (the frame instead when that covers most of it: `widenedTo`).",
+      "Capped at 1568 px long edge unless --scale. Default --out: <dir>/.obeya/shots/<page>….png.",
+      "Needs no tab: renders in the person's tab, headless Chrome, or `excalidraw render` (`renderer` says which).",
     ],
   },
   show: {
@@ -134,6 +158,22 @@ export const COMMANDS = {
     flags: ["frame"],
     live: true,
   },
+  wait: {
+    usage: "wait <page> --ask <text> [--frame <id>] [--timeout <minutes>] [--consumer <name>]",
+    summary: "Ask the person for something on a page; return their changes when they press Done",
+    page: true,
+    flags: ["ask", "frame", "timeout", "consumer"],
+    required: ["ask"],
+    details: [
+      "Shows --ask in a banner with a Done button on tabs showing the page; opens no tab. No timeout by default.",
+      "Returns {done, rev, changes}; done is button, timeout or stopped. Run it in the background.",
+    ],
+    validate(plan, bad) {
+      const { ask, timeout } = plan.flags;
+      if (!ask.trim() || ask.length > 500) throw bad("--ask is the text to show the person (1-500 characters)");
+      if (timeout !== undefined && !(/^\d+(\.\d+)?$/.test(timeout) && Number(timeout) > 0)) throw bad("--timeout is a number of minutes");
+    },
+  },
   export: {
     usage: "export <page>... --format svg|png|pdf|html --out <path> [--frame <id> | --frames] [--order <id,id,…>] [--title <text>] [--scale <n>] [--padding <n>] [--no-background] [--dark] [--embed-scene]",
     summary: "Files to share: an image, one image per frame, a PDF, or a self-contained HTML slideshow",
@@ -142,16 +182,11 @@ export const COMMANDS = {
     required: ["format", "out"],
     mutating: true,
     details: [
-      "svg|png: one page; the whole page, --frame <id>, or --frames (one file per frame into the --out directory,",
-      "  named 01-<frame-name>.svg in slide order). SVGs embed their fonts. --embed-scene makes the file reopenable in Excalidraw.",
-      "  --padding <n> pixels around the image (default 20), --no-background for a transparent one, --dark for the dark theme.",
-      "html: one self-contained file, no network requests: arrow keys or click to advance, `n` for speaker notes",
-      "  (frame customData.notes), prototype links become clickable hotspots, prints one slide per page.",
-      "pdf: the HTML deck printed by headless Chrome or Chromium (CHROME_PATH to choose); vector output.",
-      "Slide order: numeric prefix in the frame name, then customData.order, then position (rows, top to bottom,",
-      "  left to right). --order id,id,… picks and orders frames. Several pages are joined in the order given.",
-      "--title adds a title slide (html, pdf). A page without frames is one slide.",
-      "Needs no open tab: renders in the person's tab if one is connected, otherwise in a headless Chrome it starts.",
+      "svg|png: one page; the page, --frame <id>, or --frames (one file per frame into the --out directory).",
+      "  --embed-scene (reopenable), --padding <n> (default 20), --no-background, --dark.",
+      "html: a self-contained slide deck; pdf: that deck printed by headless Chrome (CHROME_PATH). --title adds a title slide.",
+      "Slides are frames in slide order (numeric name prefix, customData.order, position); --order id,id picks them.",
+      "Needs no tab. More: obeya --skill export.",
     ],
     validate(plan, bad) {
       const f = plan.flags;
@@ -172,11 +207,8 @@ export const COMMANDS = {
     usage: "library <subcommand>",
     summary: "Component libraries on demand: search the public catalogue, look at items, insert copies",
     details: [
-      "Libraries come from the public Excalidraw catalogue (github.com/excalidraw/excalidraw-libraries),",
-      "a local .excalidrawlib file, or an https URL, and are cached per user. Only downloads happen;",
-      "nothing about your drawings is sent. Items are addressed as <lib>/<item>; read them from `library show`.",
-      "Many popular libraries have unnamed items (item-1, item-2, …): use `library show <lib> --sheet <png>`",
-      "and look at the picture to choose. The person sees cached libraries in the editor's library sidebar.",
+      "From the public Excalidraw catalogue, a .excalidrawlib file, or an https URL; cached per user.",
+      "Items are <lib>/<item> (from `library show`; unnamed items: look at --sheet). More: obeya --skill library.",
     ],
     subcommands: {
       search: {
@@ -185,8 +217,7 @@ export const COMMANDS = {
         words: true,
         flags: ["limit"],
         details: [
-          "Results: {id, name, description, authors, items, named, downloads, cached}. `named: false` means items",
-          "have no names; prefer named libraries when they fit. The catalogue is refreshed at most once a day.",
+          "`named: false`: the items have no names. The catalogue is refreshed at most once a day.",
         ],
         validate(plan, bad) {
           if (plan.flags.limit !== undefined && !/^[1-9]\d{0,2}$/.test(plan.flags.limit)) throw bad("--limit is 1-999");
@@ -202,8 +233,7 @@ export const COMMANDS = {
         args: ["lib"],
         flags: ["sheet"],
         details: [
-          "--sheet writes a PNG grid of every item labelled with its <lib>/<item> id (48 per image; more items",
-          "make <name>-1.png, <name>-2.png, …). Needs no open tab: it renders like `export`.",
+          "--sheet writes a PNG grid of the items labelled with their ids (48 per image: <name>-1.png, …).",
         ],
       },
       add: {
@@ -231,9 +261,7 @@ export const COMMANDS = {
         live: true,
         mutating: true,
         details: [
-          "Downloads the library on first use. --id defaults to the item id plus a short random suffix;",
-          "the response lists every id created. --frame puts the copy in that frame.",
-          "For negative coordinates write --at=-40,120.",
+          "--id defaults to the item id plus a random suffix; `ids` lists what was created. Negative: --at=-40,120.",
         ],
         validate(plan, bad) {
           if (!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9._-]+$/i.test(plan.args.item)) throw bad("the item is <lib>/<item>, as printed by `library show`");
@@ -250,8 +278,7 @@ export const COMMANDS = {
     args: ["to"],
     mutating: true,
     details: [
-      "Needs no open tab. `staleLinks` in the result lists element links that still name the old page",
-      "(?page=<old>&element=…); update them with a patch.",
+      "`staleLinks` lists element links that still name the old page; fix them with a patch.",
     ],
     validate(plan, bad) {
       plan.args.to = normalizePageName(plan.args.to);
@@ -262,10 +289,7 @@ export const COMMANDS = {
     usage: "band <subcommand>",
     summary: "Named horizontal or vertical bands (e.g. a release line); `changes` reports moves across them",
     details: [
-      "A band is a line (--y 600) or a strip (--y 600 --to 800) across the page. `changes` adds",
-      "crossed: [{band, from, to}] to a move whose element centre changed side, where a side is",
-      "\"before\" (above / left), \"inside\" or \"after\" (below / right). Bands are runtime state",
-      "kept by the tool (git-ignored); callers register them, e.g. on startup.",
+      "A line (--y 600) or a strip (--y 600 --to 800). A move across one gets crossed: [{band, from, to}] in `changes`.",
     ],
     subcommands: {
       list: {
@@ -323,8 +347,12 @@ export const OPTION_TYPES = {
   skill: { type: "boolean" },
   version: { type: "boolean", short: "V" },
   frame: { type: "string" },
+  around: { type: "string" },
+  ask: { type: "string" },
+  timeout: { type: "string" },
   rule: { type: "string" },
   full: { type: "boolean" },
+  layout: { type: "boolean" },
   format: { type: "string" },
   file: { type: "string" },
   since: { type: "string" },
@@ -367,14 +395,14 @@ export function overviewHelp() {
     `  ${pad("--port <n>", 20)}Server port (default: the pages folder's own, from ${DEFAULT_PORT}; env OBEYA_PORT)`,
     `  ${pad("--no-open", 20)}Never open a browser tab; print the link and exit 2 instead`,
     `  ${pad("--idle-timeout <m>", 20)}A server started by this command stops after <m> idle minutes (default ${DEFAULT_IDLE_MINUTES}, 0 = never, env OBEYA_IDLE_TIMEOUT)`,
-    `  ${pad("--skill", 20)}Print the agent skill file (SKILL.md) and exit`,
+    `  ${pad("--skill [topic]", 20)}Print the agent guide (core), one topic of it, or all`,
     `  ${pad("--version, -V", 20)}Print version and exit`,
     `  ${pad("--help, -h", 20)}Show this help, or a command's help after the command`,
     "",
-    "Output: one JSON envelope on stdout: {\"id\":\"cli:<command>\",\"result\":…} or {\"id\":…,\"error\":{\"code\",\"message\"}}.",
+    "Output: one JSON line on stdout: {\"result\":…} or {\"error\":{\"code\",\"message\",\"hint\"}}.",
     "Exit codes: 0 ok, 1 error, 2 the person needs to act (open the printed link).",
     "",
-    "Are you an AI agent? Run `obeya --skill` for the full usage guide.",
+    "Are you an AI agent? Run `obeya --skill` for the usage guide.",
   ].join("\n");
 }
 

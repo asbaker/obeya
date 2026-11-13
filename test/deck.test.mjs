@@ -54,6 +54,7 @@ test("canvas links", () => {
   assert.deepEqual(parseCanvasLink("http://127.0.0.1:4747/?element=f2"), { element: "f2", page: null });
   assert.deepEqual(parseCanvasLink("http://localhost:4800/?page=other&element=x"), { element: "x", page: "other" });
   assert.deepEqual(parseCanvasLink("?element=f2"), { element: "f2", page: null });
+  assert.deepEqual(parseCanvasLink("?page=v0.2%2Fdeck&element=f2"), { element: "f2", page: "v0.2/deck" });
   assert.equal(parseCanvasLink("https://example.com/?element=f2"), null);
   assert.equal(parseCanvasLink("http://127.0.0.1:4747/"), null);
   assert.equal(parseCanvasLink(null), null);

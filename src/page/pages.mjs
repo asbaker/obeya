@@ -1,5 +1,6 @@
 // Opening a page, and pointing the view at an element or frame.
 import { normalizePageName } from "/lib/names.mjs";
+import { setTitle } from "./ui/wait-banner.mjs";
 import { CaptureUpdateAction } from "./deps.mjs";
 import { RENDERER, S } from "./state.mjs";
 import { getJSON, postJSON, reportUsed } from "./server-link.mjs";
@@ -23,13 +24,26 @@ export async function createPage(name) {
   await makePage(name);
   await openPage(name);
 }
-export async function openPage(name, frameId) {
+/**
+ * Open a page. Each switch is a browser history entry, so Back and Forward
+ * move between pages; `history: "replace"` for the first page, a page that
+ * replaces a deleted one, and Back/Forward themselves.
+ */
+export async function openPage(name, frameId, { history: how = "push" } = {}) {
   name = normalizePageName(name); // from a URL or a link: the NFC form the server uses
-  if (name !== S.currentPage) await editorJob((hold) => loadPage(name, hold));
+  if (name !== S.currentPage) await editorJob((hold) => loadPage(name, hold, how));
   goTo(frameId);
 }
-async function loadPage(name, hold) {
+// Back and Forward: open the page the entry names, without adding an entry.
+if (!RENDERER) {
+  window.addEventListener("popstate", () => {
+    const name = new URLSearchParams(location.search).get("page");
+    if (name && S.api) openPage(name, null, { history: "replace" }).catch((err) => console.error(err));
+  });
+}
+async function loadPage(name, hold, how = "push") {
   if (name === S.currentPage) return; // opened while this waited its turn
+  const first = S.currentPage === null; // the tab's first page: its URL is already the entry
   await flushSync();
   // A page that doesn't exist yet opens empty; the agent is about to create it.
   const { scene } = await getJSON(`/api/pages/${encodeURIComponent(name)}?ifMissing=empty`);
@@ -50,10 +64,11 @@ async function loadPage(name, hold) {
   const u = new URL(location.href);
   u.searchParams.set("page", name);
   u.searchParams.delete("element");
-  history.replaceState(null, "", u.pathname + u.search);
+  if (how === "push" && !first && !RENDERER && u.search !== location.search) history.pushState(null, "", u.pathname + u.search);
+  else history.replaceState(null, "", u.pathname + u.search);
   reportUsed();
   if (!RENDERER) rememberPage(name);
-  document.title = `obeya - ${name}`; // obeya first: narrow tabs still show it
+  setTitle(); // "obeya - <page>": obeya first, so narrow tabs still show it
   S.setUi((s) => ({ ...s, page: name }));
 }
 

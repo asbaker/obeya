@@ -27,7 +27,7 @@ Ask the person: *"Install the obeya skill for your coding agents, so they know h
 npx skills add asbaker/obeya -g
 ```
 
-This uses the open skills installer (it works with Claude Code, Codex, Cursor, OpenCode and many more). The skill is small: it tells an agent to run `obeya --skill`, which prints the full guide for the installed version.
+This uses the open skills installer (it works with Claude Code, Codex, Cursor, OpenCode and many more). The skill is small: it tells an agent to run `obeya --skill`, which prints the guide for the installed version, with more on each topic from `obeya --skill <topic>`.
 
 If they say no, you're done with this step: an agent can always run `obeya --skill` itself.
 

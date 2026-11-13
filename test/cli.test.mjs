@@ -39,15 +39,40 @@ test("<command> --help prints that command's help", async () => {
   assert.match(r.stdout, /^Usage: obeya patch <page> --file <path\|->/);
 });
 
-test("--skill prints a self-contained SKILL.md with frontmatter and no local paths", async () => {
+test("--skill prints the core with frontmatter; --skill all carries the whole guide; no local paths", async () => {
   const r = await run(["--skill"]);
   assert.equal(r.code, 0);
   const m = /^---\nname: obeya\ndescription: "(.+)"\n---\n/.exec(r.stdout);
   assert.ok(m, "frontmatter with name and description");
-  for (const topic of ["--no-open", "exit", "skeleton", "stickynote", "frame", "arrow", "--since last", "pointsAt", "shot", "Present", "export", "Never write `.excalidraw` files"]) {
-    assert.ok(r.stdout.includes(topic), `skill mentions ${topic}`);
+  for (const topic of ["--no-open", "exit", "skeleton", "frame", "--skill patch", "obeya changes", "obeya wait", "lint", "shot", "Never write `.excalidraw` files"]) {
+    assert.ok(r.stdout.includes(topic), `core mentions ${topic}`);
   }
-  assert.doesNotMatch(r.stdout, /\/Users\/|\/home\/|[A-Z]:\\\\|@[a-z0-9-]+\.[a-z]{2,}/i);
+  const all = await run(["--skill", "all"]);
+  assert.equal(all.code, 0);
+  assert.ok(all.stdout.startsWith(r.stdout), "all starts with the core");
+  for (const topic of ["stickynote", "arrow", "--since <rev>", "pointsAt", "Present", "export", "--format pdf", "library insert", "staleLinks", "--idle-timeout", "127.0.0.1"]) {
+    assert.ok(all.stdout.includes(topic), `the guide mentions ${topic}`);
+  }
+  assert.doesNotMatch(all.stdout, /\/Users\/|\/home\/|[A-Z]:\\\\|@[a-z0-9-]+\.[a-z]{2,}/i);
+});
+
+test("--skill <topic> prints one topic; an unknown topic is an error that lists them", async () => {
+  const r = await run(["--skill", "wait"]);
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /^# Asking the person/);
+  const bad = await run(["--skill", "nope"]);
+  assert.equal(bad.code, 1);
+  const e = JSON.parse(bad.stdout).error;
+  assert.equal(e.code, "unknown_topic");
+  assert.ok(e.hint);
+  assert.ok(e.topics.includes("patch") && e.topics.includes("export"));
+});
+
+test("errors carry a hint", async () => {
+  const r = await run(["patch", "board"]);
+  const e = JSON.parse(r.stdout).error;
+  assert.equal(e.code, "missing_argument");
+  assert.equal(typeof e.hint, "string");
 });
 
 test("a mutating command with missing arguments prints help and does nothing", async () => {
@@ -55,17 +80,19 @@ test("a mutating command with missing arguments prints help and does nothing", a
   const r = await run(["patch", "board"], { env, stdin: () => assert.fail("must not read stdin") });
   assert.equal(r.code, 1);
   const out = JSON.parse(r.stdout);
-  assert.equal(out.id, "cli:patch");
+  assert.equal(out.id, undefined);
   assert.equal(out.error.code, "missing_argument");
-  assert.match(r.stderr, /Usage: obeya patch/);
+  assert.equal(out.error.usage, "obeya patch <page> --file <path|->");
+  assert.equal(r.stderr, "", "the usage once, in the envelope");
   assert.ok(!fs.existsSync(path.join(dir, "canvas")), "no server started, no dir created");
 });
 
-test("envelope: id + result on success", async () => {
+test("envelope: {result} on success, one compact line", async () => {
   const { env } = await envFor();
   const r = await run(["status"], { env });
-  assert.deepEqual(Object.keys(JSON.parse(r.stdout)), ["id", "result"]);
-  assert.equal(JSON.parse(r.stdout).id, "cli:status");
+  assert.deepEqual(Object.keys(JSON.parse(r.stdout)), ["result"]);
+  assert.equal(r.stdout.includes("\n"), false, "compact: no pretty-printing");
+  assert.ok(JSON.parse(r.stdout).result);
   assert.equal(JSON.parse(r.stdout).result.running, false);
 });
 
@@ -147,7 +174,7 @@ test("rename: needs no tab; errors; reports links that still name the old page",
   fs.writeFileSync(path.join(dir, "canvas", "b.excalidraw"), page([]));
   const j = async (...a) => JSON.parse((await run(a, { env })).stdout);
   const r = await j("rename", "a", "c", "--no-open");
-  assert.equal(r.id, "cli:rename");
+  assert.ok(r.result);
   assert.deepEqual(r.result.staleLinks.map((l) => [l.page, l.id]), [["c", "go"]]);
   assert.deepEqual((await j("pages")).result.pages.map((p) => p.name), ["b", "c"]);
   assert.equal((await j("rename", "c", "b")).error.code, "page_exists");

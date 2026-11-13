@@ -84,7 +84,7 @@ test("user edits are logged, persisted, and read with --since last", async () =>
   // A sync claiming to be the agent is still the person's edit.
   await raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { source: "agent", elements: [rect("n2", { version: 2, x: 320 })] } });
   const moved = JSON.parse((await run(["changes", "board", "--since", "last", "--source", "user"], { env })).stdout).result.changes;
-  assert.deepEqual(moved.map((c) => [c.id, c.op, c.source, c.moved]), [["n2", "modified", "user", { from: [300, 0], to: [320, 0] }]]);
+  assert.deepEqual(moved.map((c) => [c.id, c.op, c.moved]), [["n2", "modified", { from: [300, 0], to: [320, 0] }]]);
 
   // Restart: log and cursor survive, revisions continue.
   assert.equal((await run(["stop"], { env })).code, 0);
@@ -129,7 +129,8 @@ test("idle timeout: the server saves and stops itself with no tab and no calls",
   const port = await freePort();
   const env = { ...process.env, OBEYA_DIR: path.join(dir, "c"), OBEYA_PORT: String(port), OBEYA_IDLE_TIMEOUT: "0.01" }; // 0.6 s
   const r = await run(["serve"], { env });
-  assert.equal(JSON.parse(r.stdout).result.idleTimeout, 0.01);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await raw(port, { path: "/api/info" })).json.idleTimeout, 0.01);
   await raw(port, { method: "POST", path: "/api/pages/b/sync", headers: H(), body: { elements: [rect("r1")] } });
   // Any request (status included) counts as activity, so stay quiet and wait.
   await new Promise((res) => setTimeout(res, 1500));
@@ -143,15 +144,30 @@ test("idle timeout 0 never stops", async () => {
   const env = { ...process.env, OBEYA_DIR: path.join(dir, "c"), OBEYA_PORT: String(port) };
   servers.push(env);
   const r = await run(["serve", "--idle-timeout", "0"], { env });
-  assert.equal(JSON.parse(r.stdout).result.idleTimeout, 0);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal((await raw(port, { path: "/api/info" })).json.idleTimeout, 0);
+});
+
+test("changes defaults: the person's edits since your last read, brief entries; --source all adds `source` (agent edits: smoke test)", async () => {
+  const { port, env } = await start();
+  const j = (r) => JSON.parse(r.stdout);
+  const sync = (elements) => raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { elements } });
+  await sync([rect("n1")]);
+  const first = j(await run(["changes", "board"], { env })).result;
+  assert.deepEqual(first.changes, [{ op: "added", id: "n1", type: "rectangle" }], "no rev, at, fields or source");
+  assert.deepEqual(j(await run(["changes", "board"], { env })).result.changes, [], "the cursor moved");
+  const all = j(await run(["changes", "board", "--since", "0", "--source", "all"], { env })).result.changes;
+  assert.deepEqual(all.map((c) => c.source), ["user"]);
+  assert.deepEqual(j(await run(["changes", "board", "--since", "0", "--source", "agent"], { env })).result.changes, []);
+  assert.equal(j(await run(["changes", "board", "--source", "everyone"], { env })).error.code, "invalid_argument");
 });
 
 test("bands: set, list, delete, and moves across them in `changes`", async () => {
   const { port, env } = await start();
   const j = (r) => JSON.parse(r.stdout);
   const set = j(await run(["band", "set", "board", "release", "--y", "400"], { env }));
-  assert.equal(set.id, "cli:band:set");
-  assert.deepEqual(set.result.band, { name: "release", axis: "y", from: 400, to: 400 });
+  assert.ok(set.result);
+  assert.deepEqual(set.result.bands, [{ name: "release", axis: "y", from: 400, to: 400 }]);
   await run(["band", "set", "board", "lane", "--x", "500", "--to", "900"], { env });
   assert.deepEqual(j(await run(["band", "list", "board"], { env })).result.bands.map((b) => b.name), ["lane", "release"]);
 
@@ -162,7 +178,7 @@ test("bands: set, list, delete, and moves across them in `changes`", async () =>
   const [moved] = j(await run(["changes", "board", "--since", String(start0)], { env })).result.changes;
   assert.deepEqual(moved.crossed, [{ band: "release", from: "before", to: "after" }]);
 
-  assert.equal(j(await run(["band", "delete", "board", "release"], { env })).result.deleted, "release");
+  assert.deepEqual(j(await run(["band", "delete", "board", "release"], { env })).result.bands.map((b) => b.name), ["lane"]);
   assert.equal(j(await run(["band", "delete", "board", "release"], { env })).error.code, "unknown_band");
   assert.ok(fs.existsSync(path.join(env.OBEYA_DIR, ".obeya", "board.bands.json")));
 });
@@ -261,7 +277,7 @@ test("a pages folder from before the rename keeps its change log: the server mov
   servers.push(env);
   const r = JSON.parse((await run(["changes", "b", "--no-open"], { env })).stdout);
   assert.equal(r.result.rev, 7, "the old log was read");
-  assert.equal(r.result.changes[0].source, "user");
+  assert.equal(r.result.changes[0].id, "r1");
   assert.ok(fs.existsSync(path.join(pages, ".obeya", "b.changes.jsonl")));
   assert.ok(!fs.existsSync(path.join(pages, ".excalidraw-local")));
 });
@@ -291,10 +307,10 @@ test("folders: pages in folders through URLs and the CLI; delete; names that try
   assert.equal((await raw(port, { method: "POST", path: P("Café Ideen"), headers: H() })).status, 201, "spaces and accents");
   const cli = async (...a) => JSON.parse((await run(a, { env })).stdout);
   assert.deepEqual((await cli("pages")).result.pages.map((p) => p.name), ["Café Ideen", "project-a/overview"]);
-  assert.equal((await cli("get", "project-a/overview")).result.page, "project-a/overview");
+  assert.ok(Array.isArray((await cli("get", "project-a/overview")).result.elements));
   // The CLI's rename moves a page between folders.
   const moved = await cli("rename", "project-a/overview", "project-b/overview");
-  assert.equal(moved.result.to, "project-b/overview");
+  assert.deepEqual(moved.result, { staleLinks: [] });
   assert.ok(fs.existsSync(path.join(env.OBEYA_DIR, "project-b", "overview.excalidraw")) && !fs.existsSync(path.join(env.OBEYA_DIR, "project-a")));
   // Names that try to leave the pages folder, or break the rule.
   for (const bad of ["..%2Fx", "a%2F..%2F..%2Fx", "%2Fetc", "a%5Cb", "a%3Ab", ".obeya%2Fcursors", "%E0%A4%A"]) {
@@ -333,4 +349,49 @@ test("images: the server checks files and fileIds before asking a tab; the CLI c
   const r = await run(["patch", "p", "--file", path.join(dir, "patch.json"), "--no-open"], { env: other, cwd: dir });
   assert.equal(JSON.parse(r.stdout).error.code, "invalid_image");
   assert.equal(JSON.parse((await run(["status"], { env: other })).stdout).result.running, false, "no server was started");
+});
+
+test("wait: the ask is listed for tabs; Done answers with the person's changes; timeouts and a stopped command end it", async () => {
+  const { port, env } = await start();
+  const j = (r) => JSON.parse(r.stdout);
+  const sync = (elements) => raw(port, { method: "POST", path: "/api/pages/board/sync", headers: H(), body: { elements } });
+  await sync([rect("n1"), { id: "f1", type: "frame", x: -50, y: -50, width: 400, height: 300, version: 1, versionNonce: 1 }]);
+  await run(["changes", "board"], { env }); // the agent has read everything so far
+  const waits = async () => (await raw(port, { path: "/api/waits" })).json.waits;
+  const until = async (ok) => { for (let i = 0; i < 100 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 20)); };
+
+  // No tab shows the page: with --no-open it says where, and waits anyway.
+  const waiting = run(["wait", "board", "--ask", "Circle what's wrong", "--frame", "f1", "--no-open"], { env });
+  await until(async () => (await waits()).length === 1);
+  const [w] = await waits();
+  assert.deepEqual([w.page, w.frame, w.ask], ["board", "f1", "Circle what's wrong"]);
+  await sync([rect("n1", { version: 2, x: 40 })]);
+  assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).status, 200);
+  const r = await waiting;
+  assert.equal(r.code, 0, r.stdout);
+  assert.match(r.stderr, /board/);
+  const res = j(r).result;
+  assert.equal(res.done, "button");
+  assert.deepEqual(res.changes.map((c) => [c.id, c.op]), [["n1", "modified"]]);
+  assert.deepEqual(await waits(), []);
+  assert.deepEqual(j(await run(["changes", "board"], { env })).result.changes, [], "the wait moved the agent's cursor");
+  assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).json.error.code, "unknown_wait");
+
+  // A timeout answers with what there is.
+  const timed = j(await run(["wait", "board", "--ask", "Anything?", "--timeout", "0.005", "--no-open"], { env })).result;
+  assert.deepEqual([timed.done, timed.changes], ["timeout", []]);
+
+  // The agent's command stopped (the connection closed): the banner goes.
+  const req = http.request({ host: "127.0.0.1", port, method: "POST", path: "/api/pages/board/wait", headers: { host: `127.0.0.1:${port}`, ...H() } });
+  req.on("error", () => {});
+  req.end(JSON.stringify({ ask: "Going away" }));
+  await until(async () => (await waits()).length === 1);
+  req.destroy();
+  await until(async () => (await waits()).length === 0);
+  assert.deepEqual(await waits(), []);
+
+  // Usage and request errors.
+  assert.equal(j(await run(["wait", "board"], { env })).error.code, "missing_argument");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--timeout", "soon"], { env })).error.code, "invalid_argument");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--frame", "nope", "--no-open"], { env })).error.code, "unknown_element");
 });

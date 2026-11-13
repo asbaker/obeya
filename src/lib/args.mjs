@@ -63,7 +63,13 @@ export function parseCli(argv, env = {}, cwd = process.cwd()) {
     skill: Boolean(flags.skill),
     version: Boolean(flags.version),
   };
-  if (plan.skill || plan.version || !command) return plan;
+  if (plan.skill) {
+    // `--skill [topic]`: the guide's core, or one topic of it.
+    if (rest.length) throw new UsageError("invalid_argument", "--skill takes one topic: obeya --skill [<topic>|all]");
+    plan.topic = command ?? null;
+    return plan;
+  }
+  if (plan.version || !command) return plan;
 
   let name = command;
   let spec = COMMANDS[command];
@@ -124,8 +130,8 @@ export function parseCli(argv, env = {}, cwd = process.cwd()) {
   if (flags.since !== undefined && flags.since !== "last" && !/^\d+$/.test(flags.since)) {
     throw new UsageError("invalid_argument", `--since must be a revision number or "last"`, name);
   }
-  if (flags.source !== undefined && !["user", "agent"].includes(flags.source)) {
-    throw new UsageError("invalid_argument", `--source must be "user" or "agent"`, name);
+  if (flags.source !== undefined && !["user", "agent", "all"].includes(flags.source)) {
+    throw new UsageError("invalid_argument", `--source must be "user", "agent" or "all"`, name);
   }
   if (flags.scale !== undefined && !(Number(flags.scale) > 0 && Number(flags.scale) <= 8)) {
     throw new UsageError("invalid_argument", `--scale must be a number in (0, 8]`, name);

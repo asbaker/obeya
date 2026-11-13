@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coalesce, compact, foldLabels, pointsAt, resolveChanges } from "../src/lib/report.mjs";
+import { brief, coalesce, compact, foldLabels, layoutOutline, lean, outline, pointsAt, resolveChanges } from "../src/lib/report.mjs";
 import { bounds, overlapScore } from "../src/lib/geometry.mjs";
 
 const note = (id, x, y, o = {}) => ({ id, type: "stickynote", x, y, width: 200, height: 200, version: 1, ...o });
@@ -236,4 +236,73 @@ test("a note added, relabeled and deleted again leaves nothing, label folding in
     entry({ op: "deleted", id: "tc", type: "text", containerId: "c" }),
   ], els);
   assert.deepEqual(out, []);
+});
+
+test("a note dropped in a column doesn't point at the column; a dot on a card still points at the card", () => {
+  const column = { id: "col", type: "rectangle", x: -40, y: -40, width: 800, height: 2000 };
+  const els = [column, ...row];
+  const dropped = note("new", 100, 600); // inside the column, clear of the notes
+  assert.deepEqual(pointsAt(dropped, els), []);
+  const dot = { id: "d", type: "ellipse", x: 20, y: 160, width: 14, height: 14 };
+  assert.deepEqual(pointsAt(dot, els), ["n1"]);
+  // An empty frame-like box: nothing else in it, so a note inside it still points at it.
+  assert.deepEqual(pointsAt(note("x", 2100, 100), [{ id: "box", type: "rectangle", x: 2000, y: 0, width: 1000, height: 1000 }]), ["box"]);
+});
+
+test("brief: no times or per-entry revisions, source only for both, fields only when not implied, new text in full", () => {
+  const long = "x".repeat(100);
+  const out = brief([
+    { rev: 3, at: "t", source: "user", op: "modified", id: "n1", type: "stickynote", fields: ["x", "y", "backgroundColor"], moved: { from: [0, 0], to: [5, 5] }, text: long, frame: "f1" },
+    { rev: 4, at: "t", source: "user", op: "added", id: "e", type: "ellipse", fields: [], pointsAt: [{ id: "n1", type: "stickynote" }] },
+    { rev: 5, at: "t", source: "user", op: "relabeled", id: "n2", type: "stickynote", fields: ["text"], text: "Hi" },
+    { rev: 6, at: "t", source: "user", op: "added", id: "n3", type: "stickynote", fields: [], text: long },
+  ]);
+  assert.deepEqual(out, [
+    { op: "modified", id: "n1", type: "stickynote", text: "x".repeat(79) + "…", fields: ["backgroundColor"], frame: "f1", moved: { from: [0, 0], to: [5, 5] } },
+    { op: "added", id: "e", type: "ellipse", pointsAt: [{ id: "n1", type: "stickynote" }] },
+    { op: "relabeled", id: "n2", type: "stickynote", text: "Hi" },
+    { op: "added", id: "n3", type: "stickynote", text: long }, // what the person wrote, in full
+  ]);
+  assert.equal(brief([{ op: "added", id: "a", type: "text", source: "agent", fields: [] }], { withSource: true })[0].source, "agent");
+});
+
+test("lean (get --full): live elements, no defaults or bookkeeping, coordinates to 0.1", () => {
+  const els = [
+    { id: "a", type: "rectangle", x: 10.123, y: 5, width: 100.06, height: 50, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "#a5d8ff", fillStyle: "solid", strokeWidth: 2, opacity: 100, groupIds: [], frameId: "f1", seed: 5, version: 3, versionNonce: 9, updated: 1, index: "a0", isDeleted: false, boundElements: [{ type: "text", id: "t" }] },
+    { id: "t", type: "text", x: 0, y: 0, width: 40, height: 20, text: "Hi", originalText: "Hi", fontSize: 16, fontFamily: 5, lineHeight: 1.25, containerId: "a", isDeleted: false },
+    { id: "gone", type: "rectangle", x: 0, y: 0, width: 1, height: 1, isDeleted: true },
+    { id: "l", type: "line", x: 0, y: 0, width: 10, height: 0, points: [[0, 0], [10.04, 0.333]], isDeleted: false },
+  ];
+  assert.deepEqual(lean(els), [
+    { id: "a", type: "rectangle", x: 10.1, y: 5, width: 100.1, height: 50, backgroundColor: "#a5d8ff", frameId: "f1", boundElements: [{ type: "text", id: "t" }] },
+    { id: "t", type: "text", x: 0, y: 0, width: 40, height: 20, text: "Hi", fontSize: 16, fontFamily: 5, containerId: "a" },
+    { id: "l", type: "line", x: 0, y: 0, width: 10, height: 0, points: [[0, 0], [10, 0.3]] },
+  ]);
+});
+
+test("describe --layout: rows in reading order, equal sizes and gaps, what sits inside what, arrows", () => {
+  const f = { id: "f", type: "frame", x: 0, y: 0, width: 1600, height: 900, name: "01 Flow" };
+  const step = (i) => ({ id: `s${i}`, type: "rectangle", x: 40 + i * 315, y: 150, width: 250, height: 110, frameId: "f" });
+  const els = [f, { id: "title", type: "text", x: 40, y: 30, width: 400, height: 40, text: "Flow", frameId: "f" },
+    ...[0, 1, 2].map(step), label("s0-l", "s0", "Start"),
+    { id: "a", type: "arrow", x: 290, y: 205, points: [[0, 0], [65, 0]], startBinding: { elementId: "s0" }, endBinding: { elementId: "s1" }, frameId: "f" },
+    { id: "col", type: "rectangle", x: 40, y: 400, width: 400, height: 400, frameId: "f" },
+    note("card", 60, 450, { frameId: "f" }), label("card-l", "card", "A card"),
+    note("loose", 5000, 5000)];
+  const text = layoutOutline("p", 3, els);
+  assert.match(text, /## 01 Flow \[f\] 1600×900 at 0,0/);
+  assert.match(text, /row 1 y30: title "Flow"/);
+  assert.match(text, /row 2 y150: s0 "Start" · s1 · s2 — 3× 250×110, gaps 65/);
+  assert.match(text, /in col:\n {4}row 1 y450: card "A card" 200×200/);
+  assert.match(text, /arrows: s0 → s1/);
+  assert.match(text, /## \(outside frames\)\nrow 1 y5000: loose/);
+  assert.doesNotMatch(layoutOutline("p", 3, els, { frame: "f" }), /outside frames/);
+  assert.match(layoutOutline("p", 3, [{ ...f }], { frame: "f" }), /\(empty\)/);
+});
+
+test("describe --frame: the outline of one frame", () => {
+  const els = [{ id: "f", type: "frame", x: 0, y: 0, width: 100, height: 100, name: "F" }, note("a", 0, 0, { frameId: "f" }), note("b", 500, 500)];
+  const text = outline("p", 1, els, { frame: "f" });
+  assert.match(text, /\[a\]/);
+  assert.doesNotMatch(text, /\[b\]/);
 });

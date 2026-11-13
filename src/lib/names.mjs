@@ -68,3 +68,30 @@ export function caseClash(name, names, except = null) {
 
 /** A file name for an export of a page: folders flattened with "-". */
 export const exportStem = (name) => name.replaceAll("/", "-");
+
+/** Edit distance between two strings (Levenshtein). */
+function distance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * The `n` page names nearest to `name`, for an unknown_page error: names that
+ * contain it (or its last part) first, then by edit distance, case-insensitive.
+ */
+export function nearestNames(name, names, n = 5) {
+  const q = String(name).toLowerCase(), base = baseName(q);
+  const score = (s) => {
+    const l = s.toLowerCase();
+    return (l.includes(q) || l.includes(base) ? 0 : 1000) + Math.min(distance(q, l), distance(base, baseName(l)));
+  };
+  return names.map((s) => [s, score(s)]).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, n).map(([s]) => s);
+}
+
+/** A page's folder with each part cut to its first character ("project-a/research" → "p/r"), for a narrow label. */
+export const shortFolder = (name) => folderOf(name).split("/").filter(Boolean).map((p) => [...p][0]).join("/");

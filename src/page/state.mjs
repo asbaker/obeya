@@ -32,6 +32,7 @@ export const S = {
   connected: false, // the event stream is open to the server serving this tab's folder
   lastInputAt: 0, // when the person last did something that can edit (see sync.mjs, settling)
   // Present
+  waits: [], // agents waiting for the person (obeya wait), on any page
   focusedFrame: null,
   hiddenIds: new Set(),
   // The React UI fills these in when it mounts.

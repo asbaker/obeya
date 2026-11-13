@@ -19,6 +19,7 @@ export function createTabs({ store, dir, onClose }) {
   const tabs = new Map();
   const pending = new Map(); // reqId -> {resolve, reject, timer, tab}
   let nextReq = 1;
+  let greeting = () => []; // [event, data] pairs every tab gets when it connects
 
   const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
@@ -49,6 +50,8 @@ export function createTabs({ store, dir, onClose }) {
   }
 
   const count = (kind) => [...tabs.values()].filter((t) => t.kind === kind).length;
+  /** Pages the person's tabs show now. */
+  const showingPages = () => [...new Set([...tabs.values()].filter((t) => t.kind === "person" && t.page).map((t) => t.page))];
 
   /** Tell the other tabs on `page` about elements that just won a merge. */
   function relay(page, incoming, except) {
@@ -99,6 +102,7 @@ export function createTabs({ store, dir, onClose }) {
     const caps = new Set((url.searchParams.get("caps") ?? "").split(",").filter(Boolean));
     tabs.set(id, { res, page: page && validPageName(page) ? page : null, lastUsed: Date.now(), kind, caps });
     send(res, "hello", { tab: id, dir });
+    for (const [event, data] of greeting()) send(res, event, data);
     req.on("close", () => {
       if (tabs.get(id)?.res === res) tabs.delete(id);
       onClose();
@@ -134,7 +138,8 @@ export function createTabs({ store, dir, onClose }) {
   }
 
   return {
-    broadcast, relay, ask, answer, connect, used, showing, renamed, deleted, closeAll, count,
+    greet: (fn) => (greeting = fn),
+    broadcast, relay, ask, answer, connect, used, showing, showingPages, renamed, deleted, closeAll, count,
     get size() { return tabs.size; },
     get waiting() { return pending.size; },
   };

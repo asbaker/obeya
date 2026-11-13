@@ -2,6 +2,7 @@
 // undo step, in the visible editor for the page on screen or an invisible
 // second editor for any other page.
 import { computeLayout } from "/lib/layout.mjs";
+import { frameAt, outsideOf } from "/lib/geometry.mjs";
 import { h, createRoot, Excalidraw, convertToExcalidrawElements, restoreElements, CaptureUpdateAction } from "./deps.mjs";
 import { S, changedSinceKnown } from "./state.mjs";
 import { answer, fail, getJSON } from "./server-link.mjs";
@@ -62,6 +63,9 @@ async function offscreenEditor(page) {
 // never overlap, and the invisible editor holds one page at a time.
 export const queuePatch = (msg) => editorJob((hold) => handleAgentPatch(msg, hold));
 
+// Fields a re-applied skeleton keeps from the element when it doesn't give them.
+const KEPT_ON_RESKELETON = ["groupIds", "link", "customData", "locked", "angle", "backgroundColor", "strokeColor", "fillStyle", "strokeWidth", "strokeStyle", "roughness", "opacity", "roundness"];
+
 async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], delete: del = [], toBack = [], toFront = [], layout = [], files = {} }, hold) {
   let stacks = [];
   try {
@@ -100,7 +104,19 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     } catch (err) {
       return fail(reqId, "invalid_patch", err.message);
     }
-    const { skeleton: skel, deferred } = split;
+    const { deferred } = split;
+    // Re-labelling an element that exists: the new label keeps the old one's
+    // type size, font and colour unless given (before conversion, so it wraps right).
+    const skel = split.skeleton.map((sk) => {
+      // The converter throws on a frame without `children`: an empty frame is fine.
+      if (sk?.type === "frame" && !Array.isArray(sk.children)) sk = { ...sk, children: [] };
+      if (!sk?.label || !byId.has(sk.id)) return sk;
+      const old = scene.find((e) => e.type === "text" && e.containerId === sk.id && !e.isDeleted);
+      if (!old) return sk;
+      const label = { ...sk.label };
+      for (const k of ["fontSize", "fontFamily", "strokeColor", "textAlign", "verticalAlign"]) if (!(k in label) && old[k] !== undefined) label[k] = old[k];
+      return { ...sk, label };
+    });
     const known = (id) => skel.some((s) => s.id === id) || live(id);
     const dangling = deferred.flatMap((d) => [d.start, d.end]).filter((id) => id && !known(id));
     if (dangling.length) return fail(reqId, "unknown_element", `arrow ends refer to unknown element(s): ${[...new Set(dangling)].join(", ")}`);
@@ -159,9 +175,33 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       } catch (err) {
         return fail(reqId, "invalid_patch", `skeleton: ${err?.message || err}`);
       }
+      // Re-applying a skeleton to an element that exists (the way to reword a
+      // label) builds it afresh: what the skeleton leaves out keeps its current
+      // value instead of a default, so the element stays in its frame, group and
+      // style, with its link and data. A frame in this patch listing it as a
+      // child still moves it.
+      const skelOf = new Map(skel.map((s) => [s.id, s]));
+      const claimed = new Set(skel.filter((s) => s.type === "frame").flatMap((s) => s.children ?? []));
+      const frameAlive = (id) => id && (out.get(id) ?? byId.get(id))?.type === "frame" && !(out.get(id) ?? byId.get(id)).isDeleted;
+      for (let el of converted) {
+        const cur = byId.get(el.id), given = skelOf.get(el.id);
+        // A frame without children keeps the box it was given (the converter pads it).
+        if (el.type === "frame" && given && !given.children?.length) {
+          for (const k of ["x", "y", "width", "height"]) if (typeof given[k] === "number") el = { ...el, [k]: given[k] };
+        }
+        if (!cur || cur.isDeleted) created.push(el.id); // a deleted id brought back is new again
+        else if (given) {
+          const kept = {};
+          for (const k of KEPT_ON_RESKELETON) if (!(k in given) && k in cur) kept[k] = cur[k];
+          if (!("frameId" in given) && !claimed.has(el.id) && frameAlive(cur.frameId)) kept.frameId = cur.frameId;
+          el = { ...el, ...kept };
+        }
+        out.set(el.id, { ...el, version: (cur?.version ?? 0) + el.version });
+      }
+      // A new label belongs to its container's frame.
       for (const el of converted) {
-        if (!byId.has(el.id)) created.push(el.id);
-        out.set(el.id, { ...el, version: (byId.get(el.id)?.version ?? 0) + el.version });
+        const box = el.type === "text" && el.containerId && out.get(el.containerId);
+        if (box && el.frameId !== (box.frameId ?? null)) out.set(el.id, { ...out.get(el.id), frameId: box.frameId ?? null });
       }
       // Re-applying a skeleton to an existing labelled shape makes a new label
       // (with a new generated id): delete the old one, or it lingers as an
@@ -195,6 +235,13 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       for (let el of restoreElements(raw, scene, { refreshDimensions: true, repairBindings: false })) {
         const f = wantFrame.get(el.id);
         if (f !== undefined && el.frameId !== f && (f === null || isFrame(f))) el = { ...el, frameId: f };
+        // An edit that names a frame takes the label along, or the two come apart when the frame moves.
+        if (f !== undefined) {
+          const to = el.frameId ?? null;
+          for (const t of out.values()) {
+            if (t.containerId === el.id && !t.isDeleted && !wantFrame.has(t.id) && (t.frameId ?? null) !== to) out.set(t.id, { ...t, frameId: to, version: t.version + 1, versionNonce: nonce() });
+          }
+        }
         const cur = byId.get(el.id);
         if (cur?.boundElements?.length && !setsBound.has(el.id)) {
           const have = new Set((el.boundElements ?? []).map((b) => b.id));
@@ -224,6 +271,32 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     for (const id of del) {
       for (const e of out.values()) {
         if (e.id === id || e.containerId === id) out.set(e.id, { ...e, isDeleted: true, version: e.version + 1, versionNonce: nonce() });
+      }
+    }
+
+    // Frames by position, as when the person drops something: a new element
+    // (or one an edit moved) that lies wholly inside a frame joins it, and a
+    // moved one that ends up wholly outside its frame leaves it. A patch that
+    // says where (frameId, or a frame's children) is left alone.
+    const said = new Set([
+      ...skel.filter((s) => s && "frameId" in s).map((s) => s.id),
+      ...skel.filter((s) => s?.type === "frame").flatMap((s) => s.children ?? []),
+      ...elements.filter((p) => "frameId" in p).map((p) => p.id),
+    ]);
+    const movedByEdit = elements.filter((p) => byId.has(p.id) && ["x", "y", "width", "height"].some((k) => k in p)).map((p) => p.id);
+    const frames = [...out.values()].filter((e) => e.type === "frame" && !e.isDeleted);
+    if (frames.length) {
+      for (const id of new Set([...created, ...movedByEdit])) {
+        const el = out.get(id);
+        if (!el || el.isDeleted || el.type === "frame" || el.containerId || said.has(id)) continue;
+        const at = frameAt(el, frames);
+        const cur = el.frameId ? frames.find((f) => f.id === el.frameId) : null;
+        let next = el.frameId ?? null;
+        if (at && at !== next) next = at;
+        else if (!at && cur && byId.has(id) && outsideOf(el, cur)) next = null;
+        if (next === (el.frameId ?? null)) continue;
+        out.set(id, { ...el, frameId: next });
+        for (const t of out.values()) if (t.containerId === id && !t.isDeleted) out.set(t.id, { ...t, frameId: next });
       }
     }
 
