@@ -16,6 +16,7 @@ A local-only shared Excalidraw canvas for a person and an AI agent.
 
 ## Rules
 
+- Token cost is a design constraint, weighed first. An agent pays for every byte it reads or writes, in every session: the guide core, each installed skill's description (loaded every session), command output, and the patches it writes. Prefer work the server or CLI can do (defaults, layout, restyling, library inserts) over bytes the agent writes; keep optional content behind `--skill <topic>` or in separate, optional skills; when proposing a feature, estimate what it costs or saves per session and per drawing.
 - No runtime dependencies. Node built-ins only; `playwright-core` is a dev dependency for the smoke test.
 - Privacy: never put local absolute paths, usernames, email addresses or other personal info in any repo file, including tests, docs and the skill text. Tests use temp dirs.
 - Port 4747 is the default and may be in use by a developer's own canvas: never stop it. Tests let the OS pick free ports (ephemeral range), so parallel test files can't race for one.

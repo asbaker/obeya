@@ -16,7 +16,7 @@
 
 **Your agent draws instead of describing.** No more ASCII diagrams in your terminal. Your agent sketches its thinking on a real Excalidraw canvas in your browser: flows, architectures, roadmaps, wireframes, slides.
 
-**You answer by drawing.** Circle the part that's wrong, drag a card, stick a note on it, the way you would at a whiteboard. Your agent sees exactly what you did and what you pointed at, and draws its next move.
+**You answer by drawing.** Circle the part that's wrong, drag a card, stick a note on it, the way you would at a whiteboard. Press Done, and your agent sees exactly what you did and what you pointed at, and draws its next move.
 
 **Local only.** Pages are `.excalidraw` files, in whatever folder you keep them.
 
@@ -24,14 +24,14 @@
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="docs/readme/hero-1.png" alt="A signup flow story map the agent drew on the canvas"></td>
-<td width="33%" valign="top"><img src="docs/readme/hero-2.png" alt="The person circles two cards and adds a pink note: why two steps here?"></td>
-<td width="33%" valign="top"><img src="docs/readme/hero-3.png" alt="The agent answers on the page and drafts a merged step"></td>
+<td width="33%" valign="top"><img src="docs/readme/hero-1.png" alt="Three sign-in screens the agent mocked up, and a banner: your agent is waiting for you, which sign-in should we build? Done"></td>
+<td width="33%" valign="top"><img src="docs/readme/hero-2.png" alt="The person circles screen B, magic link, and adds a pink note: B, plus a Google button"></td>
+<td width="33%" valign="top"><img src="docs/readme/hero-3.png" alt="The agent marks B as chosen, fades A and C, adds Continue with Google to B and replies: building B"></td>
 </tr>
 <tr>
-<td valign="top"><b>1 · The agent draws</b></td>
-<td valign="top"><b>2 · You circle and ask</b></td>
-<td valign="top"><b>3 · It sees what you meant</b></td>
+<td valign="top"><b>1 · It asks on the page</b></td>
+<td valign="top"><b>2 · You circle one and press Done</b></td>
+<td valign="top"><b>3 · It builds what you chose</b></td>
 </tr>
 </table>
 
@@ -62,7 +62,7 @@ Your agent starts obeya in the background and opens the canvas in your browser. 
 
 ### Update or remove
 
-`npm update -g obeya` and `npx skills update obeya` keep both current. Removing obeya leaves your pages where they are; see [INSTALL.md](INSTALL.md#updating-and-removing).
+`npm update -g obeya` and `npx skills update obeya` keep both current; [CHANGELOG.md](CHANGELOG.md) says what's new. Removing obeya leaves your pages where they are; see [INSTALL.md](INSTALL.md#updating-and-removing).
 
 ## How it works
 
@@ -70,7 +70,7 @@ Your agent starts obeya in the background and opens the canvas in your browser. 
 
 1. **Ask for a picture.** *"Map out how a request flows through this app."* Your agent draws it in your open tab, live, and points your view at it.
 2. **React on the canvas.** Circle, drag, cross out, add sticky notes. No need to put it into words.
-3. **Say "take a look".** Your agent reads what you changed and what each mark points at, then answers on the page: it moves cards, adds options, redraws.
+3. **Press Done, or say "take a look".** Your agent reads what you changed and what each mark points at, then answers on the page: it moves cards, adds options, redraws.
 
 Every change goes through the live editor, so your open tab stays in step. Pages are plain `.excalidraw` files: commit them, or keep them out of git.
 
@@ -89,9 +89,14 @@ Each example was drawn by an agent through obeya (Claude Code with Claude Opus 5
 <td valign="top"><img src="docs/readme/prototype.png" alt="Three phone screens built from wireframe components, linked into a clickable prototype"><br><b>Clickable prototype</b><br>Click through it in Present mode</td>
 <td valign="top"><img src="docs/readme/deck.png" alt="Four slides: a title, bullets, a diagram and a chart"><br><b>Slides</b><br>Exported as one offline HTML file</td>
 </tr>
+<tr>
+<td valign="top"><img src="docs/readme/refactor-plan.png" alt="A refactor plan: three big files on the left, split into folders of smaller files on the right, with a note"><br><b>Refactor plan</b><br>Before and after, before any code moves</td>
+<td valign="top"><img src="docs/readme/mermaid.png" alt="Mermaid text beside the flowchart it became, drawn as editable shapes"><br><b>Mermaid diagrams</b><br>Editable shapes; change the text and run it again to redraw</td>
+<td valign="top"><img src="docs/readme/architecture.png" alt="A checkout architecture drawn with AWS service icons: CloudFront, API Gateway, Lambda, DynamoDB, EventBridge, SQS and SES"><br><b>Architecture</b><br>Real service icons from public libraries</td>
+</tr>
 </table>
 
-The prototype uses components from [ecommerce mobile ui](https://github.com/excalidraw/excalidraw-libraries/blob/main/libraries/webkul/ecommerce-mobile-ui.excalidrawlib) by Webkul Software (MIT), from the public Excalidraw libraries catalogue.
+The prototype uses components from [ecommerce mobile ui](https://github.com/excalidraw/excalidraw-libraries/blob/main/libraries/webkul/ecommerce-mobile-ui.excalidrawlib) by Webkul Software (MIT), and the architecture uses [AWS Serverless Icons v2](https://github.com/excalidraw/excalidraw-libraries/blob/main/libraries/stojanovic/aws-serverless-icons-v2.excalidrawlib) by slobodan, both from the public Excalidraw libraries catalogue.
 
 ## What you get
 
@@ -99,7 +104,7 @@ The prototype uses components from [ecommerce mobile ui](https://github.com/exca
 <tr>
 <td width="33%" valign="top"><b>It draws instead of describing</b><br>Diagrams, flows, wireframes and slides on a real canvas, not ASCII in a terminal.</td>
 <td width="33%" valign="top"><b>You answer by drawing</b><br>Circle, arrow, sticky note, drag. It reads what you did and what each mark points at.</td>
-<td width="33%" valign="top"><b>It checks its own work</b><br>It screenshots the page, finds overlaps and clipped text, and fixes them before saying it's done.</td>
+<td width="33%" valign="top"><b>It checks its own work</b><br>It checks the page for overlaps, clipped text and hard-to-read colours, fixes them, and takes one screenshot of what it built.</td>
 </tr>
 <tr>
 <td valign="top"><b>It shows you where to look</b><br>It moves your view to the right frame while you talk.</td>
@@ -110,14 +115,11 @@ The prototype uses components from [ecommerce mobile ui](https://github.com/exca
 
 ## The CLI
 
-Your agent drives obeya through a CLI that prints JSON. When you circle two cards and ask a question, this is what it sees:
+Your agent drives obeya through a CLI that prints JSON. When it asks which sign-in to build and you circle one, add a note and press Done, this is what it gets back:
 
 ```bash
-$ obeya changes signup-flow
-{ "result": { "changes": [
-  { "op": "added", "type": "ellipse", "pointsAt": [
-      { "text": "Enter the code we emailed" }, { "text": "Confirm your phone" } ] },
-  { "op": "added", "type": "stickynote", "text": "why two steps here?" } ] } }
+$ obeya wait signup-flow --frame f-signup --ask "Which sign-in should we build? Circle one, add a note, then press Done."
+{"result":{"done":"button","rev":366,"changes":[{"op":"added","id":"e1","type":"ellipse","frame":"f-signup","pointsAt":[{"id":"sb-h","type":"text","text":"Sign in with email"},{"id":"sb-sub","type":"text","text":"We'll email you a link. No password."},{"id":"sb-cta","type":"rectangle","text":"Email me a link"}]},{"op":"added","id":"n1","type":"stickynote","text":"B, plus a Google button","frame":"f-signup","pointsAt":[{"id":"sb-shell","type":"rectangle"},{"id":"e1","type":"ellipse"}]}]}}
 ```
 
 | Command | What it does |
@@ -126,7 +128,8 @@ $ obeya changes signup-flow
 | `obeya changes <page>` | What the person changed since the agent last looked, and what each annotation points at |
 | `obeya wait <page> --ask "…"` | Ask you for something on the page; returns your changes when you press Done |
 | `obeya describe <page>` | A plain-text outline of the page |
-| `obeya shot <page>` | A PNG, so the agent can look at the page |
+| `obeya lint <page>` | Overlaps, clipped text, stray elements, low contrast: checks instead of a screenshot |
+| `obeya shot <page>` | A PNG of a page, a frame or a few elements, so the agent can look |
 | `obeya export <page>` | PNG, SVG, PDF or an HTML slideshow |
 | `obeya mermaid <page>` | Draw a Mermaid diagram as editable elements; run it again to update it |
 | `obeya library` | Search, view and insert components from public libraries |
@@ -154,6 +157,10 @@ obeya was planned and designed in obeya. What changed:
 - **Feedback lands where it belongs.** A sticky note on the draft ("skip the gif, 3 stills is fine") says exactly what you mean and where.
 - **Big plans become readable.** A refactor became before/after diagrams and state machines, not a wall of text in the terminal.
 - **The page is the record.** Decisions, the roadmap and a done log stay on the canvas, so the next session, or the next agent, picks up where you left off.
+
+**What does it cost my agent?**
+
+Little. Learning obeya costs an agent about 3k tokens, every command prints one compact line with only what the agent acts on, and it checks its work as text before taking a screenshot.
 
 **Is this an official Excalidraw project?**
 

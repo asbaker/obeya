@@ -9,3 +9,5 @@ node_modules/
 .DS_Store
 # Pages drawn while working on this repo
 /docs/obeya/
+# Runbooks: local notes for releasing and other chores
+/docs/runbooks/

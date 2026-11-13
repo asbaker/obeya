@@ -1126,7 +1126,8 @@ test("branding: the tab title and favicon, the mark in the pill, About obeya", {
     ["menu-new-page", "menu-pages", "menu-rename", "menu-export", "menu-present", "menu-about"]);
   await A.click('[data-testid="menu-about"]');
   await A.waitForSelector('[data-testid="about-dialog"]');
-  await until(() => A.evaluate(() => document.querySelector('[data-testid="about-version"]')?.textContent === "0.1.0"), { what: "About shows the version" });
+  const { version } = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  await until(() => A.evaluate((v) => document.querySelector('[data-testid="about-version"]')?.textContent === v, version), { what: "About shows the version" });
   assert.ok(await A.evaluate(() => document.querySelector(".xl-lockup")?.naturalWidth > 0), "the lockup loads");
   assert.match(await A.textContent('[data-testid="about-dialog"]'), /obeya --skill/);
   // One dialog at a time: the page picker's and export's shortcuts do nothing while About is open.

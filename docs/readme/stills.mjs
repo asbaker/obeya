@@ -4,10 +4,11 @@
 //
 // Every page is drawn by obeya itself, through the CLI and a headless canvas
 // tab, on a server of its own (an explicit port, so no port is remembered).
-// The hero plays the real loop: the agent draws, a person circles two cards
-// and asks with the mouse and keyboard, the agent reads `changes` and answers.
+// The hero plays the real loop with `wait`: the agent draws three options and asks,
+// a person circles one and adds a note with the mouse and keyboard, presses Done,
+// and the agent acts on what the circle points at.
 import { createRequire } from "node:module";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,7 @@ const BIN = path.join(ROOT, "bin", "obeya.mjs");
 
 function obeya(args, input) {
   const r = spawnSync(process.execPath, [BIN, ...args], { env, input: input === undefined ? "" : JSON.stringify(input), encoding: "utf8" });
+  if (!r.stdout.trim()) { if (r.status) throw new Error(`obeya ${args.join(" ")}: exit ${r.status}`); return {}; } // a success with nothing to report
   const out = JSON.parse(r.stdout);
   if (out.error) throw new Error(`obeya ${args.join(" ")}: ${out.error.code} ${out.error.message}`);
   return out.result;
@@ -40,15 +42,45 @@ const line = (id, x, y, w, o = {}) => ({ type: "line", id, x, y, width: w, heigh
 const withChildren = (f, els) => [frame(...f, els.map((e) => e.id)), ...els];
 
 // --- the pages -------------------------------------------------------------------------
+// The hero: the agent asks which signup to build, with three sign-in screens on the page,
+// mocked up from a UI kit. Each option's ids start with s<k>- (sa-, sb-, sc-).
+const SIGNUP = [
+  ["a", "A · Email and password", "Create your account", null],
+  ["b", "B · Magic link", "Sign in with email", "We'll email you a link. No password."],
+  ["c", "C · Google only", "Welcome", "One tap. Nothing to remember."],
+];
+const HERO = { x: (i) => 40 + i * 600, labelY: 190, y: 245, w: 500, h: 700 };
+// Kit widgets per option: [option, item, x, y in the phone, {old text: new text}, extra edits by old text].
+const HERO_WIDGETS = [
+  ["a", "textfield", 26, 190, { TextBox: "Email", Placeholder: "you@example.com" }],
+  ["a", "textfield", 26, 286, { TextBox: "Password", Placeholder: "••••••••••" }, { Placeholder: { fontSize: 28 } }],
+  ["a", "link-button", 26, 480, { "Read More >": "Have an account? Log in >" }],
+  ["b", "textfield", 26, 220, { TextBox: "Email", Placeholder: "you@example.com" }],
+];
+const heroButton = (id, x, y, label, ghost) => box(id, x, y, 448, 56, label, { bg: ghost ? "#ffffff" : "#1e1e1e", stroke: "#1e1e1e", labelColor: ghost ? "#1e1e1e" : "#ffffff", size: 20 });
+function phone(id, x0, y0, w, h, parts) {
+  return [
+    { ...box(`${id}-shell`, 0, 0, w, h, null, { bg: "#ffffff" }), strokeWidth: 4 },
+    box(`${id}-notch`, w / 2 - 60, 14, 120, 28, null, { bg: "#1e1e1e", stroke: "#1e1e1e" }),
+    text(`${id}-time`, 30, 16, "9:41", 16),
+    box(`${id}-home`, w / 2 - 70, h - 22, 140, 6, null, { bg: "#1e1e1e", stroke: "#1e1e1e" }),
+    ...parts,
+  ].map((e) => ({ ...e, x: e.x + x0, y: e.y + y0 }));
+}
 function signupFlow() {
-  const acts = ["Find us", "Sign up", "Verify", "Get started"];
-  const tasks = [["Landing page", "Pricing"], ["Email and password", "Sign in with Google"], ["Enter the code we emailed", "Confirm your phone"], ["Pick a template", "Invite your team"]];
-  const els = []; // the frame's own name is the title
-  acts.forEach((a, i) => {
-    els.push(note(`sf-a${i}`, 40 + i * 280, 60, a, C.blue, 220, 100, 22));
-    tasks[i].forEach((t, j) => els.push(note(`sf-t${i}${j}`, 40 + i * 280, 200 + j * 150, t, C.yellow, 220, 120, 18)));
+  const grey = { strokeColor: "#868e96" };
+  const els = [text("sf-title", 40, 100, "How should people sign up?", 40)];
+  SIGNUP.forEach(([k, name, heading, sub], i) => {
+    const s = `s${k}`;
+    els.push(text(`${s}-label`, HERO.x(i), HERO.labelY, name, 28));
+    const parts = [text(`${s}-h`, 26, 100, heading, 34)];
+    if (sub) parts.push(text(`${s}-sub`, 26, 152, sub, 18, grey));
+    if (k === "a") parts.push(heroButton(`${s}-cta`, 26, 400, "Create account"));
+    if (k === "b") parts.push(heroButton(`${s}-cta`, 26, 340, "Email me a link"));
+    if (k === "c") parts.push(heroButton(`${s}-cta`, 26, 230, "Continue with Google", true));
+    els.push(...phone(s, HERO.x(i), HERO.y, HERO.w, HERO.h, parts));
   });
-  return withChildren(["f-signup", 0, 0, 1600, 600, "Signup flow"], els);
+  return [frame("f-signup", 0, 0, 1780, 990, "Signup options", []), ...els]; // a fixed box: room above the title for the banner
 }
 
 function storyMap() {
@@ -254,10 +286,55 @@ function deck() {
   ];
 }
 
+function refactorPlan() {
+  // Before and after: three big files (bars sized by lines) split into folders of small ones.
+  const NOW = [["api.js", 2300], ["app.js", 1900], ["worker.js", 1200]];
+  const AFTER = [
+    ["api/", [["routes.js", 400], ["auth.js", 350], ["orders.js", 600], ["payments.js", 550], ["errors.js", 400]]],
+    ["app/", [["views.js", 600], ["state.js", 450], ["forms.js", 450], ["client.js", 400]]],
+    ["worker/", [["queue.js", 400], ["jobs.js", 500], ["email.js", 300]]],
+  ];
+  const rowY = (i) => 180 + i * 170, nowW = (n) => n * 0.2, modW = (n) => n * 0.3;
+  const els = [
+    text("rp-title", 40, 30, "Refactor plan: split the three big files", 36),
+    text("rp-now", 40, 120, "Now · 3 files, 5,400 lines", 24, { strokeColor: "#495057" }),
+    text("rp-after", 720, 120, "After · the same code in 12 files", 24, { strokeColor: "#495057" }),
+  ];
+  NOW.forEach(([f, n], i) => els.push(box(`rp-n${i}`, 40, rowY(i) + 10, nowW(n), 110, `${f}\n${n.toLocaleString("en")} lines`, { bg: C.pink, stroke: "#495057", size: 20 })));
+  AFTER.forEach(([dir, mods], i) => {
+    const w = mods.reduce((t, [, n]) => t + modW(n) + 10, 30);
+    els.push(box(`rp-d${i}`, 720, rowY(i), w, 130, null, { bg: "#f8f9fa", stroke: "#adb5bd" }));
+    els.push(text(`rp-d${i}-t`, 735, rowY(i) + 8, dir, 20, { strokeColor: "#495057" }));
+    let x = 735;
+    mods.forEach(([f, n], j) => { els.push(box(`rp-m${i}${j}`, x, rowY(i) + 44, modW(n), 72, `${f}\n${n}`, { bg: C.green, stroke: "#495057", size: 16 })); x += modW(n) + 10; });
+    els.push({ ...arrow(`rp-a${i}`, 40 + nowW(NOW[i][1]) + 8, rowY(i) + 65, 720 - 16 - (40 + nowW(NOW[i][1])), 0, `rp-n${i}`, `rp-d${i}`), strokeWidth: 2 });
+  });
+  els.push(note("rp-note", 1290, 640, "Keep orders and payments together for now", C.yellow, 260, 110, 18));
+  return [frame("f-refactor", 0, 0, 1600, 800, "Refactor plan", []), ...els];
+}
+
+// Mermaid text in, editable shapes out.
+const MERMAID = `flowchart TD
+  A[Cart] --> B{Signed in?}
+  B -- yes --> C[Saved address]
+  B -- no --> D[Guest details]
+  C --> E[Pay]
+  D --> E
+  E --> F([Order confirmed])
+  E -. declined .-> G[Try another card]
+  G --> E`;
+
+// Architecture from real icons (library items), labelled and connected.
+const ARCH = [
+  ["cloudfront", "CDN", 0, 0], ["apigateway", "API", 1, 0], ["lambda", "Orders", 2, 0], ["dynamodb", "Orders table", 3, 0],
+  ["eventbridge", "Events", 2, 1], ["sqs", "Email queue", 3, 1], ["ses", "Receipts", 4, 1],
+];
+const ARCH_X = (c) => 60 + c * 300, ARCH_Y = (r) => 160 + r * 300;
+
 // --- the run ---------------------------------------------------------------------------
 // `node docs/readme/stills.mjs` makes everything; name some to make only those:
-// hero, how-it-works, kanban, story-map, roadmap, data-model, prototype, deck.
-const ALL = ["hero", "how-it-works", "kanban", "story-map", "roadmap", "data-model", "prototype", "deck"];
+// hero, how-it-works, kanban, story-map, roadmap, data-model, prototype, deck, mermaid, architecture, refactor-plan.
+const ALL = ["hero", "how-it-works", "kanban", "story-map", "roadmap", "data-model", "prototype", "deck", "mermaid", "architecture", "refactor-plan"];
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 for (const w of wanted) if (!ALL.includes(w)) throw new Error(`unknown still "${w}"; one of ${ALL.join(", ")}`);
 const pageOf = (w) => (w === "hero" ? "signup-flow" : w);
@@ -317,54 +394,99 @@ try {
     }, [fs.readFileSync(file).toString("base64"), ratio]);
     fs.writeFileSync(file, Buffer.from(b64, "base64"));
   }
+  // Insert UI-kit widgets ([item, x, y, frame, id prefix, {old text: new text}, extra edits by old text]), then relabel them.
+  async function insertWidgets(page, list) {
+    const inserted = list.map(([item, x, y, frame, id, texts, extra = {}]) => {
+      const r = obeya(["library", "insert", `ecommerce-mobile-ui/${item}`, page, "--at", `${x},${y}`, "--frame", frame, "--id", id]);
+      return [r.ids ?? r.created, texts, extra];
+    });
+    await sleep(800);
+    const els = full(page);
+    const edits = [];
+    for (const [ids, texts, extra] of inserted) {
+      for (const id of ids) {
+        const e = els.get(id);
+        if (e?.type !== "text" || !(e.text in texts)) continue;
+        const { bg, ...style } = extra[e.text] ?? {};
+        edits.push(await relabel(els, e, texts[e.text], style));
+        if (bg && e.containerId) edits.push({ id: e.containerId, backgroundColor: bg });
+      }
+    }
+    patch(page, { elements: edits });
+    await sleep(800);
+  }
   const exportPng = (name, scale = 2) => obeya(["export", name, "--format", "png", "--scale", String(scale), "--padding", "40", "--out", out(`${name}.png`)]);
 
   if (wanted.includes("hero")) {
-    // Hero: the loop.
+    // Hero: the loop with wait. The agent asks on the page; the person circles an option,
+    // adds a note and presses Done; the agent reads what they pointed at and acts on it.
     await open("signup-flow");
     patch("signup-flow", { skeleton: signupFlow() });
+    await insertWidgets("signup-flow", HERO_WIDGETS.map(([k, item, x, y, texts, extra], n) => {
+      const i = SIGNUP.findIndex(([o]) => o === k);
+      return [item, HERO.x(i) + x, HERO.y + y, "f-signup", `s${k}-w${n}`, texts, extra];
+    }));
     obeya(["show", "signup-flow", "--frame", "f-signup"]);
-    await sleep(800);
+    let answer = "";
+    const w = spawn(process.execPath, [BIN, "wait", "signup-flow", "--frame", "f-signup", "--ask", "Which sign-in should we build? Circle one, add a note, then press Done."], { env, stdio: ["ignore", "pipe", "ignore"] });
+    w.stdout.on("data", (d) => { answer += d; });
+    const waited = new Promise((r) => w.on("exit", r));
+    await tab.waitForSelector('[data-testid="wait-banner"]', { timeout: 15000 });
+    await sleep(7000); // past the "your agent changed …" toast
     await tab.mouse.move(5, 5);
     await tab.screenshot({ path: out("hero-1.png") });
-    const start = obeya(["changes", "signup-flow"]).rev;
-    // The person circles the two verify cards and asks.
+    // The person circles option B's screen.
     const c = async (x, y) => P("toClient", x, y);
+    const b = SIGNUP.findIndex(([k]) => k === "b"), bx = HERO.x(b);
     await tab.click("[data-testid=toolbar-ellipse]");
-    const a = await c(575, 182), b = await c(855, 488);
-    await tab.mouse.move(a.x, a.y); await tab.mouse.down();
-    for (let i = 1; i <= 12; i++) await tab.mouse.move(a.x + ((b.x - a.x) * i) / 12, a.y + ((b.y - a.y) * i) / 12);
+    const e0 = await c(bx - 40, HERO.labelY - 10), e1 = await c(bx + HERO.w + 40, HERO.y + HERO.h + 20);
+    await tab.mouse.move(e0.x, e0.y); await tab.mouse.down();
+    for (let i = 1; i <= 12; i++) await tab.mouse.move(e0.x + ((e1.x - e0.x) * i) / 12, e0.y + ((e1.y - e0.y) * i) / 12);
     await tab.mouse.up();
     await tab.keyboard.press("Escape");
+    // …and adds a note on the screen's empty lower half.
     await tab.click("[data-testid=toolbar-stickynote]");
-    // Dragged out at its size, on the circle's lower-right edge where it hides little.
-    const n0 = await c(770, 430), n1 = await c(960, 560);
+    const n0 = await c(bx + 240, HERO.y + 480), n1 = await c(bx + 470, HERO.y + 620);
     await tab.mouse.move(n0.x, n0.y); await tab.mouse.down();
     for (let i = 1; i <= 10; i++) await tab.mouse.move(n0.x + ((n1.x - n0.x) * i) / 10, n0.y + ((n1.y - n0.y) * i) / 10);
     await tab.mouse.up();
     await tab.waitForSelector("textarea", { timeout: 5000 });
-    await tab.keyboard.type("why two steps here?");
+    await tab.keyboard.type("B, plus a Google button");
     await tab.keyboard.press("Escape");
     await tab.keyboard.press("Escape");
     await sleep(800);
-    // Pink, as a person would pick in the panel (recolouring only; a patch that resizes a note leaves its text at the old width).
-    const comment = (await P("elements")).find((e) => e.type === "stickynote" && !e.id.startsWith("sf-"));
-    console.error(`comment ${Math.round(comment.width)}x${Math.round(comment.height)} at ${Math.round(comment.x)},${Math.round(comment.y)}`);
-    patch("signup-flow", { elements: [{ id: comment.id, backgroundColor: C.pink }] });
-    await sleep(1200);
-    await tab.mouse.move(5, 5);
+    // Pink, as a person would pick in the panel. A note drawn by drag comes out larger than the drag; settle its size.
+    const comment = (await P("elements")).find((e) => e.type === "stickynote");
+    patch("signup-flow", { skeleton: [note(comment.id, bx + 250, HERO.y + 535, "B, plus a Google button", C.pink, 240, 150, 20)] });
+    await sleep(7000);
+    await tab.hover('[data-testid="wait-done"]');
+    await sleep(400);
     await tab.screenshot({ path: out("hero-2.png") });
-    // The agent reads what the person pointed at, and answers on the page.
-    const changes = obeya(["changes", "signup-flow", "--since", String(start), "--source", "user"]).changes;
-    const pointed = changes.flatMap((x) => x.pointsAt ?? []).map((p) => p.text).filter(Boolean);
-    if (!pointed.length) throw new Error(`the circle pointed at nothing: ${JSON.stringify(changes)}`);
-    patch("signup-flow", { skeleton: [
-      note("sf-reply", 1180, 470, "Both check it's really you. One screen instead: a code by email or SMS?", C.green, 300, 150, 18),
-      note("sf-merged", 600, 640, "Enter one code (email or SMS)", C.green, 220, 120, 18),
-      arrow("sf-ra", 1178, 545, -340, 150, "sf-reply", "sf-merged"),
-    ], elements: [{ id: "f-signup", height: 800 }] });
-    obeya(["show", "signup-flow", "--frame", "f-signup"]); // refit: the frame grew
-    await sleep(1500);
+    // Done: the agent gets the person's changes, with what the circle points at.
+    await tab.click('[data-testid="wait-done"]');
+    await waited;
+    const res = JSON.parse(answer).result;
+    fs.mkdirSync(path.join(HERE, ".obeya"), { recursive: true });
+    fs.writeFileSync(path.join(HERE, ".obeya", "hero-wait.json"), JSON.stringify(res)); // the README's CLI example
+    const pointed = res.changes.flatMap((x) => x.pointsAt ?? []).map((p) => p.text ?? "").join(" ");
+    if (!/Email me a link|Sign in with email/.test(pointed)) throw new Error(`the circle didn't point at option B: ${JSON.stringify(res)}`);
+    // The agent acts on it: B chosen, the others set aside, Google added to B as a second button.
+    const all = [...full("signup-flow").values()];
+    const faded = all.filter((e) => /^s[ac]-/.test(e.id)).map((e) => ({ id: e.id, opacity: 25 }));
+    const grey = { strokeColor: "#868e96" };
+    patch("signup-flow", {
+      elements: [...faded, { id: "sb-shell", strokeColor: "#2f9e44", strokeWidth: 6 }],
+      skeleton: [
+        { ...text("sb-label", bx, HERO.labelY, "B · Magic link · chosen", 28), strokeColor: "#2f9e44" },
+        ...phone("sb", bx, HERO.y, HERO.w, HERO.h, [
+          line("sb-or1", 26, 432, 190, { stroke: "#ced4da" }), text("sb-or", 236, 420, "or", 18, grey), line("sb-or2", 284, 432, 190, { stroke: "#ced4da" }),
+          heroButton("sb-g", 26, 470, "Continue with Google", true),
+        ]).slice(4),
+        note("sf-reply", HERO.x(2) + 120, HERO.y + 400, "Building B, with Google as a second button. Starting with the email screen.", C.green, 300, 150, 18),
+      ],
+    });
+    await sleep(7000);
+    await tab.addStyleTag({ content: ".HintViewer { display: none !important; }" }); // Excalidraw's "to move canvas…" tip
     await tab.mouse.move(5, 5);
     await tab.screenshot({ path: out("hero-3.png") });
   }
@@ -385,7 +507,7 @@ try {
     exportPng("how-it-works");
   }
 
-  const simple = { kanban, "story-map": storyMap, roadmap, "data-model": dataModel };
+  const simple = { kanban, "story-map": storyMap, roadmap, "data-model": dataModel, "refactor-plan": refactorPlan };
   for (const name of Object.keys(simple).filter((n) => wanted.includes(n))) {
     await open(name);
     patch(name, { skeleton: simple[name]() });
@@ -399,27 +521,7 @@ try {
     patch("prototype", { skeleton: prototypeShells() });
     await sleep(800);
     // Widgets from the library, inserted into their screen, then relabelled.
-    const inserted = [];
-    PROTO_WIDGETS.forEach(([s, item, x, y, texts, extra = {}], k) => {
-      const at = [phoneX(s) + 20 + x, PHONE.y + 20 + y];
-      const r = obeya(["library", "insert", `ecommerce-mobile-ui/${item}`, "prototype", "--at", at.join(","), "--frame", `pr-${s + 1}`, "--id", `pr-w${k}`]);
-      inserted.push([r.ids ?? r.created, texts, extra]);
-    });
-    await sleep(800);
-    const els = full("prototype");
-    const edits = [];
-    for (const [ids, texts, extra] of inserted) {
-      for (const id of ids) {
-        const e = els.get(id);
-        if (e?.type !== "text" || !(e.text in texts)) continue;
-        const x = extra[e.text] ?? {};
-        const { bg, ...style } = x;
-        edits.push(await relabel(els, e, texts[e.text], style));
-        if (bg && e.containerId) edits.push({ id: e.containerId, backgroundColor: bg });
-      }
-    }
-    patch("prototype", { elements: edits });
-    await sleep(800);
+    await insertWidgets("prototype", PROTO_WIDGETS.map(([sc, item, x, y, texts, extra], k) => [item, phoneX(sc) + 20 + x, PHONE.y + 20 + y, `pr-${sc + 1}`, `pr-w${k}`, texts, extra]));
     exportPng("prototype");
     await fitTo(out("prototype.png"), GALLERY_RATIO);
   }
@@ -434,6 +536,42 @@ try {
     await fitTo(out("deck.png"), GALLERY_RATIO);
     obeya(["export", "deck", "--format", "html", "--title", "Checkout · Q3 review", "--out", path.join(HERE, ".obeya", "deck.html")]);
   }
+  if (wanted.includes("mermaid")) {
+    await open("mermaid");
+    const r = spawnSync(process.execPath, [BIN, "mermaid", "mermaid", "--file", "-", "--id", "mm"], { env, input: MERMAID, encoding: "utf8" });
+    const res = JSON.parse(r.stdout);
+    if (res.error) throw new Error(`obeya mermaid: ${res.error.code} ${res.error.message}`);
+    // The source beside the diagram, so the still says where it came from.
+    const els = full("mermaid");
+    const mm = [...els.values()].filter((e) => e.id.startsWith("mm-"));
+    const top = Math.min(...mm.map((e) => e.y)), left = Math.min(...mm.map((e) => e.x));
+    patch("mermaid", { skeleton: [
+      { ...box("mm-src", left - 620, top, 540, 300, MERMAID, { bg: "#f8f9fa", stroke: "#ced4da", size: 18 }), label: { text: MERMAID, fontSize: 20, fontFamily: 3, textAlign: "left", verticalAlign: "top", strokeColor: "#1e1e1e" } },
+      text("mm-src-l", left - 620, top - 44, "checkout.mmd", 22, { strokeColor: "#868e96" }),
+    ] });
+    await sleep(800);
+    exportPng("mermaid");
+    await fitTo(out("mermaid.png"), GALLERY_RATIO);
+  }
+
+  if (wanted.includes("architecture")) {
+    await open("architecture");
+    patch("architecture", { skeleton: [frame("f-arch", 0, 0, 1560, 640, "Checkout architecture", []), text("ar-title", 40, 40, "Checkout · how an order flows", 36)] });
+    ARCH.forEach(([item, , c, r], k) => obeya(["library", "insert", `aws-serverless-icons-v2/${item}`, "architecture", "--at", `${ARCH_X(c)},${ARCH_Y(r)}`, "--frame", "f-arch", "--id", `ar-i${k}`]));
+    await sleep(800);
+    const els = [...full("architecture").values()];
+    const boxOf = (k) => { const p = els.filter((e) => e.id.startsWith(`ar-i${k}-`)); const x0 = Math.min(...p.map((e) => e.x)), y0 = Math.min(...p.map((e) => e.y)); return { x0, y0, x1: Math.max(...p.map((e) => e.x + e.width)), y1: Math.max(...p.map((e) => e.y + e.height)) }; };
+    const B = ARCH.map((_, k) => boxOf(k));
+    const link = (id, a, b, label) => { const s = B[a], e = B[b]; const sx = s.x1 + 12, sy = (s.y0 + s.y1) / 2, ex = e.x0 - 12, ey = (e.y0 + e.y1) / 2;
+      return { ...arrow(id, sx, sy, ex - sx, ey - sy, null, null, label), strokeWidth: 2 }; };
+    const down = (id, a, b, label) => { const s = B[a], e = B[b]; const sx = (s.x0 + s.x1) / 2, sy = s.y1 + 16, ey = e.y0 - 12;
+      return { ...arrow(id, sx, sy, 0, ey - sy, null, null, label), strokeWidth: 2 }; };
+    patch("architecture", { skeleton: [link("ar-a0", 0, 1, "HTTPS"), link("ar-a1", 1, 2), link("ar-a2", 2, 3, "write"), down("ar-a3", 2, 4, "OrderPlaced"), link("ar-a4", 4, 5), link("ar-a5", 5, 6, "send")] });
+    await sleep(800);
+    exportPng("architecture");
+    await fitTo(out("architecture.png"), GALLERY_RATIO);
+  }
+
   console.log(JSON.stringify({ made: wanted }));
 } finally {
   await browser.close();
