@@ -2,6 +2,16 @@
 
 What changed in each release of obeya. Versions follow [semver](https://semver.org); while obeya is 0.x, a minor release can change what a command prints, and says so under **Changed**.
 
+## [0.2.1] - 2026-11-13
+
+Fixes for `obeya wait`. Update both: `npm update -g obeya` and `npx skills update obeya`.
+
+### Fixed
+
+- Agents asked in chat instead of waiting on the page while iterating with you. The guide now tells them to wait after every round of changes.
+- The wait banner covered the toolbar's More tools (⋮) menu. Excalidraw's menus now open over it.
+- With six or more obeya tabs open in one browser, saves and Done stopped reaching the server and `obeya wait` never returned (browsers allow six connections to one server). Older tabs now pause and say so; click one to resume, with your edits kept. A command that starts the server waits a few seconds for your open tabs to reconnect instead of opening another one.
+
 ## [0.2.0] - 2026-11-12
 
 Cheaper for agents. An agent now learns obeya in about 3k tokens instead of 6.5k, and every command prints only what it acts on. New: ask the person for something on a page and wait for their answer, Mermaid diagrams as editable elements, and text checks that replace most screenshots.

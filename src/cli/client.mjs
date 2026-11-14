@@ -10,6 +10,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(here, "..", "server", "main.mjs");
 const BROWSER_WAIT_MS = 30000;
 const SERVER_START_MS = 15000; // generous: a busy or slow machine may take a while to start node
+// Tabs left open from the server's last run reconnect by themselves within a
+// few seconds (the browser retries every 3 s, or 1 s once a server said so).
+// Opening a tab before then adds one more each time the server starts, and
+// enough tabs use up the browser's connections to the server (see tabs.mjs).
+const TABS_BACK_MS = 4000;
 
 export class CliError extends Error {
   constructor(code, message, extra = {}) {
@@ -103,7 +108,18 @@ export async function ensureServer(plan, client, note) {
     } catch {}
     throw new CliError("server_start_failed", `server did not start within ${SERVER_START_MS / 1000}s${exited !== null ? ` (exit ${exited})` : ""}; see .obeya/server.log in the pages dir`, tail ? { log: tail } : {});
   }
-  return i;
+  return { ...i, started: true };
+}
+
+/** Is a person's tab connected? Right after starting the server, give tabs from its last run time to reconnect. */
+export async function tabsConnected(client, i) {
+  if (i.browsers > 0) return true;
+  if (!i.started) return false;
+  for (let t = 0; t < TABS_BACK_MS / 250; t++) {
+    await sleep(250);
+    if ((await client.info())?.browsers > 0) return true;
+  }
+  return false;
 }
 
 export function openInBrowser(url) {
@@ -119,7 +135,7 @@ export function openInBrowser(url) {
 /** Live commands need a connected tab: open one (or fail with exit 2 under --no-open) and wait for it. */
 export async function ensureBrowser(plan, client, note, page, frame) {
   const i = await ensureServer(plan, client, note);
-  if (i.browsers > 0) return;
+  if (await tabsConnected(client, i)) return;
   const url = client.canvasUrl(page, frame);
   if (plan.noOpen) throw new CliError("no_canvas_open", "no canvas tab is connected; open the link, then retry", { url });
   openInBrowser(url);

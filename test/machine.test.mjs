@@ -82,6 +82,15 @@ test("connection (1): away and back through catching up; two dead ends", () => {
   assert.deepEqual(["AWAY", "HELLO"].map((e) => f.send(e)), ["away", "catching"]);
 });
 
+test("connection (1): parked (too many tabs) waits offline and catches up when it connects again", () => {
+  const m = createMachine(CONNECTION);
+  const run = (...evs) => evs.map((e) => m.send(e));
+  assert.deepEqual(run("HELLO", "PARK", "HELLO", "CAUGHT_UP"), ["connected", "parked", "catching", "connected"]);
+  assert.deepEqual(run("PARK", "AWAY", "HELLO", "PARK"), ["parked", "away", "catching", "parked"]);
+  assert.throws(() => m.send("PARK"), { code: "bad_transition" }, "a parked tab has no stream to be parked on");
+  assert.equal(m.can("CAUGHT_UP"), false);
+});
+
 test("present (3): on and off; paused is data (the last frame per page), not a state", () => {
   assert.deepEqual(edges(PRESENT), [["off", "START", "presenting"], ["presenting", "STOP", "off"]]);
   const m = createMachine(PRESENT);
