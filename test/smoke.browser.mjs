@@ -1387,6 +1387,18 @@ test("wait: the ask shows on that page's tab only (other tabs count it in the pi
   assert.equal(await A.textContent('[data-testid="wait-ask"]'), "Move the first note, then press Done");
   assert.ok(await A.isVisible('[data-testid="wait-frame"]'), "the frame is outlined");
   assert.match(await A.title(), /^● obeya - board$/);
+  // Excalidraw's menus open over it: Done is clickable, then with More tools (⋮) open its items are on top.
+  const topmost = (sel) => A.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => {
+    const r = e.getBoundingClientRect();
+    return document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)?.closest(sel) === e;
+  }), sel);
+  assert.deepEqual(await topmost('[data-testid="wait-done"]'), [true], "Done is clickable");
+  await A.click(".App-toolbar__extra-tools-trigger");
+  await A.waitForSelector(".App-toolbar__extra-tools-dropdown", { timeout: 5000 });
+  const items = await topmost(".App-toolbar__extra-tools-dropdown .dropdown-menu-item");
+  assert.ok(items.length > 0 && items.every(Boolean), `the banner covers the menu: ${items}`);
+  await A.keyboard.press("Escape");
+  await A.mouse.click(1500, 900); // focus back on the canvas, for the shortcut below
   // It follows the editor's theme: Excalidraw's own toggle (Shift+Alt+D), and back.
   const bannerBg = () => A.evaluate(() => getComputedStyle(document.querySelector(".xl-wait")).backgroundColor);
   const light = await bannerBg();

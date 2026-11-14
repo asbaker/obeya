@@ -29,16 +29,20 @@ export const SAVING = {
 };
 
 // 1 · The page's connection to the server (its event stream). Edits wait in
-// the tab while away and are sent after catching up. Two dead ends need a
+// the tab while away (or parked) and are sent after catching up. Two dead ends need a
 // reload: the port now serves another folder, or something else holds it.
 export const CONNECTION = {
   name: "connection",
   initial: "connecting",
   states: {
-    connecting: { on: { HELLO: "connected", AWAY: "away", LOST: "lost" } },
-    connected: { on: { AWAY: "away", LOST: "lost" } }, // edits sync live
+    connecting: { on: { HELLO: "connected", AWAY: "away", LOST: "lost", PARK: "parked" } },
+    connected: { on: { AWAY: "away", LOST: "lost", PARK: "parked" } }, // edits sync live
     away: { on: { AWAY: "away", HELLO: "catching", OTHER_FOLDER: "wrong-folder", LOST: "lost" } }, // edits wait here; the stream retries
-    catching: { on: { CAUGHT_UP: "connected", AWAY: "away", LOST: "lost" } }, // take the server's changes, then send the waiting edits
+    catching: { on: { CAUGHT_UP: "connected", AWAY: "away", LOST: "lost", PARK: "parked" } }, // take the server's changes, then send the waiting edits
+    // Too many tabs open: the server asked this one, used least lately, to let
+    // go of its stream (a browser has few connections per host). Edits wait
+    // here; when the person comes back to the tab it connects and catches up.
+    parked: { on: { HELLO: "catching", AWAY: "away", LOST: "lost", OTHER_FOLDER: "wrong-folder" } },
     "wrong-folder": {}, // reload needed; edits made while away were not saved
     lost: {}, // the stream gave up: something else answers on the port
   },

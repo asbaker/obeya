@@ -1,6 +1,6 @@
 {
   "name": "obeya",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local-only shared Excalidraw canvas for a person and an AI agent, driven by a JSON CLI. Not an official Excalidraw project.",
   "license": "MIT",
   "repository": {

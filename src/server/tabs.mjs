@@ -4,6 +4,16 @@ import { ApiError } from "./http.mjs";
 import { validPageName } from "../lib/names.mjs";
 
 const BROWSER_TIMEOUT_MS = 15000;
+// A browser opens at most 6 connections to one host (HTTP/1.1), and each tab's
+// event stream holds one for as long as the tab is open. With 6 tabs on this
+// server, every request from every tab (saving edits, Done) waits for a free
+// connection forever. So keep at most this many of the person's streams open:
+// a tab that connects parks the least recently used ones, which let go of
+// theirs and come back when the person returns to them.
+const MAX_PERSON_STREAMS = 4;
+// How soon a tab's stream reconnects after the server went away (ms; the
+// browser's default is 3 s): a restarted server sees its tabs back sooner.
+const RETRY_MS = 1000;
 
 /**
  * @param {object} o
@@ -101,12 +111,31 @@ export function createTabs({ store, dir, onClose }) {
     const kind = url.searchParams.get("renderer") === "1" ? "renderer" : "person";
     const caps = new Set((url.searchParams.get("caps") ?? "").split(",").filter(Boolean));
     tabs.set(id, { res, page: page && validPageName(page) ? page : null, lastUsed: Date.now(), kind, caps });
+    res.write(`retry: ${RETRY_MS}\n\n`);
     send(res, "hello", { tab: id, dir });
     for (const [event, data] of greeting()) send(res, event, data);
+    if (kind === "person") parkExtra(id);
     req.on("close", () => {
       if (tabs.get(id)?.res === res) tabs.delete(id);
       onClose();
     });
+  }
+
+  /**
+   * Park the least recently used person tabs (never `keep`) until at most
+   * MAX_PERSON_STREAMS are open. Only tabs whose page code knows parking (cap
+   * "park"): an older tab would reconnect at once and park another.
+   */
+  function parkExtra(keep) {
+    const others = [...tabs].filter(([id, t]) => t.kind === "person" && t.caps?.has("park") && id !== keep).sort(([, a], [, b]) => a.lastUsed - b.lastUsed);
+    for (let n = count("person"); n > MAX_PERSON_STREAMS && others.length; n--) {
+      const [id, t] = others.shift();
+      tabs.delete(id);
+      // Requests waiting on it go to another tab next time; they fail now rather than time out.
+      for (const [reqId, p] of pending) if (p.tab === id) answer(reqId, { error: { code: "canvas_error", message: "the canvas tab was parked (too many tabs open); retry" } });
+      send(t.res, "parked", {});
+      t.res.end();
+    }
   }
 
   /** A tab reports use (focus, pointer, keys) and which page it shows. */

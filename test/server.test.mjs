@@ -395,3 +395,81 @@ test("wait: the ask is listed for tabs; Done answers with the person's changes; 
   assert.equal(j(await run(["wait", "board", "--ask", "x", "--timeout", "soon"], { env })).error.code, "invalid_argument");
   assert.equal(j(await run(["wait", "board", "--ask", "x", "--frame", "nope", "--no-open"], { env })).error.code, "unknown_element");
 });
+
+/** A stand-in tab's event stream: the events it got, and whether the server ended it. */
+function stream(port, { tab, caps = "layout,mermaid,park", renderer = false } = {}) {
+  const q = new URLSearchParams({ tab, page: "b", caps });
+  if (renderer) q.set("renderer", "1");
+  const s = { events: [], raw: "", ended: false };
+  s.req = http.request({ host: "127.0.0.1", port, path: `/events?${q}`, headers: { host: `127.0.0.1:${port}` } }, (res) => {
+    res.on("data", (c) => {
+      s.raw += c;
+      s.events = [...s.raw.matchAll(/^event: (.*)$/gm)].map((m) => m[1]);
+    });
+    res.on("end", () => (s.ended = true));
+  });
+  s.req.on("error", () => {});
+  s.req.end();
+  return s;
+}
+const until = async (ok, what) => {
+  for (let i = 0; i < 200 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.ok(await ok(), what);
+};
+
+// The bug: a browser holds at most 6 connections to one host and each tab's
+// stream holds one, so with 6 tabs open every save and every Done waited
+// forever (edits stopped reaching the server; `obeya wait` never answered).
+test("too many tabs: a tab that connects parks the one used least lately, so the browser keeps connections free", async () => {
+  const { port } = await start();
+  const info = async () => (await raw(port, { path: "/api/info" })).json;
+  const old = stream(port, { tab: "tab-old-code", caps: "layout,mermaid" }); // page code from before parking: never parked
+  await until(async () => (await info()).browsers === 1, "the old tab connected");
+  const tabs = [];
+  for (let i = 0; i < 3; i++) {
+    tabs.push(stream(port, { tab: `tab-number-${i}` }));
+    await until(async () => (await info()).browsers === i + 2, `tab ${i} connected`);
+  }
+  assert.match(tabs[0].raw, /^retry: \d+$/m, "a restarted server gets its tabs back soon");
+  // The person uses tab 0, so tab 1 is now the one used least lately.
+  await raw(port, { method: "POST", path: "/api/tabs/tab-number-0/used", headers: H(), body: { page: "b" } });
+  const renderer = stream(port, { tab: "renderer-tab", renderer: true }); // a headless renderer has its own browser
+  await until(async () => (await info()).renderers === 1, "the renderer connected");
+  assert.ok(tabs.every((t) => !t.ended), "four tabs fit");
+  const fifth = stream(port, { tab: "tab-number-4" });
+  await until(() => tabs[1].ended, "the least recently used tab was parked");
+  assert.ok(tabs[1].events.includes("parked"), "told why, so it doesn't reconnect by itself");
+  assert.equal((await info()).browsers, 4);
+  assert.ok(!old.ended && !tabs[0].ended && !tabs[2].ended && !fifth.ended && !renderer.ended);
+  // Coming back to a parked tab connects it again, and parks the next least used.
+  const back = stream(port, { tab: "tab-number-1" });
+  await until(() => tabs[2].ended, "the next least recently used tab was parked");
+  assert.equal((await info()).browsers, 4);
+  assert.equal((await raw(port, { method: "POST", path: "/api/tabs/tab-number-2/used", headers: H(), body: {} })).json.error.code, "unknown_tab");
+  for (const s of [old, ...tabs, renderer, fifth, back]) s.req.destroy();
+});
+
+test("a live command right after starting the server waits for tabs from its last run to reconnect, rather than open another", async () => {
+  const dir = tmpDir();
+  const port = await freePort();
+  const env = { ...process.env, OBEYA_DIR: path.join(dir, "canvas"), OBEYA_PORT: String(port) };
+  servers.push(env);
+  // A tab left open from the last run: it retries until the server is back, a moment after it starts.
+  let tab = null, stop = false;
+  (async () => {
+    for (let i = 0; i < 300 && !stop; i++) {
+      const up = await raw(port, { path: "/api/info" }).catch(() => null);
+      if (up) {
+        await new Promise((r) => setTimeout(r, 1000));
+        tab = fakeTab(port, { reply: () => ({ elements: [], created: [] }) });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  })();
+  const r = await run(["patch", "b", "--file", "-", "--no-open"], { env, stdin: () => JSON.stringify({ elements: [] }) });
+  stop = true;
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  assert.equal(tab?.seen.length, 1, "the reconnected tab applied the patch");
+  tab.close();
+});

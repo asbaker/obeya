@@ -1,6 +1,6 @@
 # Asking the person for something: wait
 
-When you need the person to do something on a page (answer questions, triage, review a draft, place or rank cards, mark what's wrong), ask on the page and wait:
+When you need the person to do something on a page (answer questions, triage, review a draft or the changes you just made, place or rank cards, mark what's wrong), ask on the page and wait. Wait again after each round of changes: while you iterate together, the page is where they answer, not the chat.
 
 ```bash
 obeya wait roadmap --frame f-questions --ask "Answer the questions in this frame on stickies, then press Done"

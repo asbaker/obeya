@@ -54,14 +54,33 @@ export const connection = createMachine(CONNECTION);
 let awayBecause = null; // the toast for going away: the server said bye, or the stream dropped
 let catchRound = 0;
 
+// The server names the folder it serves: if the port comes back serving
+// another folder, stop here rather than save this page's edits into it.
+let folder = null;
+let stream = null; // this tab's event stream
+
 // Connected only once the editor is ready, so the server never counts a tab
 // that can't yet answer agent requests.
 export function connectEvents() {
+  openStream();
+  watchConnection();
+}
+
+// A parked tab (too many tabs open; see "parked" below) connects again when the
+// person comes back to it.
+const resume = () => connection.state === "parked" && stream?.readyState === EventSource.CLOSED && openStream();
+if (!RENDERER) {
+  window.addEventListener("focus", resume);
+  document.addEventListener("pointerdown", resume, true);
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && resume());
+}
+
+function openStream() {
   const q = new URLSearchParams({ tab: TAB_ID });
   if (S.currentPage) q.set("page", S.currentPage);
   if (RENDERER) q.set("renderer", "1");
-  q.set("caps", "layout,mermaid"); // what this page's code can do; a tab opened before an upgrade lacks it
-  const events = new EventSource(`/events?${q}`);
+  q.set("caps", "layout,mermaid,park"); // what this page's code can do; a tab opened before an upgrade lacks it
+  const events = (stream = new EventSource(`/events?${q}`));
   events.addEventListener("remote-elements", (e) => applyRemote(JSON.parse(e.data)));
   events.addEventListener("agent-patch", (e) => queuePatch(JSON.parse(e.data)));
   events.addEventListener("show", (e) => handleShow(JSON.parse(e.data)));
@@ -108,14 +127,22 @@ export function connectEvents() {
   });
   // Tabs survive restarts: EventSource reconnects by itself, and
   // the tab then catches up with the server and sends what it couldn't save.
-  // The server names the folder it serves: if the port comes back serving
-  // another folder, stop here rather than save this page's edits into it.
-  let folder = null;
   events.addEventListener("hello", (e) => {
     const { dir } = JSON.parse(e.data);
-    if (folder && dir !== folder) return connection.send("OTHER_FOLDER");
+    if (folder && dir !== folder) {
+      events.close();
+      return connection.send("OTHER_FOLDER");
+    }
     folder = dir;
     connection.send("HELLO");
+  });
+  // A browser has only a few connections per host and each tab's stream holds
+  // one: with too many tabs open, saving and Done in every tab would wait
+  // forever. The server parks the tab used least lately; it lets go of its
+  // stream (else it would reconnect) until the person comes back to it.
+  events.addEventListener("parked", () => {
+    events.close();
+    if (connection.can("PARK")) connection.send("PARK");
   });
   events.addEventListener("bye", () => {
     awayBecause = "The obeya server stopped. Your edits are kept in this tab and saved when it's back (any obeya command starts it).";
@@ -127,6 +154,9 @@ export function connectEvents() {
     awayBecause ??= "Lost the connection to the obeya server. Your edits are kept in this tab; retrying…";
     if (connection.can("AWAY")) connection.send("AWAY");
   };
+}
+
+function watchConnection() {
   connection.subscribe((to, from) => {
     setOnline(to === "connected" || to === "catching");
     if (to === "away" && from !== "away") toast(awayBecause, { duration: Infinity });
@@ -140,8 +170,8 @@ export function connectEvents() {
         toast("Reconnected to the obeya server.");
       });
     }
+    if (to === "parked") toast("This tab is paused: too many obeya tabs are open in this browser. Click here to resume; your edits are kept.", { duration: Infinity });
     if (to === "wrong-folder") {
-      events.close();
       notice("The obeya server on this port now serves a different folder. Reload this tab to open it; edits made here since it went away were not saved.");
     }
     if (to === "lost") notice("Lost the connection to the obeya server. Run <code>obeya open</code>, then reload this tab.");

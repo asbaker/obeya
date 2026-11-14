@@ -45,7 +45,7 @@ obeya lint <page>                      # overlaps, clipped text, misrouted arrow
 
 - **Before you rearrange** anything the person can see, read `obeya changes <page>`: they may have circled or annotated it. Move their marks with it, or ask (`--skill changes`).
 - **When the person says they changed something**, read `obeya changes <page>` and treat circles, arrows and notes as instructions.
-- **When the page asks the person something** (questions, triage, review, ranking), also start `obeya wait <page> --frame <id> --ask "…"` in the background, so their answers on the page come back to you when they press Done. Asking in chat is fine too; say which page you're waiting on (`--skill wait`).
+- **Whenever the person should look at a page**: after you change it for them, or it asks something (questions, triage, review, ranking). Start `obeya wait <page> --frame <id> --ask "…"` in the background, every round, instead of asking in chat: their marks come back when they press Done (`--skill wait`).
 - **Prefer real components** (icons, cloud and UI kits) over plain rectangles (`--skill library`).
 - **Flowcharts, sequence, class, state, ER diagrams**: Mermaid via `obeya mermaid` (`--skill mermaid`).
 
@@ -53,7 +53,7 @@ obeya lint <page>                      # overlaps, clipped text, misrouted arrow
 
 1. Fix each patch's `warnings`.
 2. After a batch, `obeya lint <page>` (and `describe --layout --frame <id>` for a frame you arranged): far cheaper than a screenshot.
-3. Screenshot only **a new page or a frame you built**, once, scoped to it (`obeya shot <page> --frame <id>`, or the page), and read the PNG. After edits to an existing page, stop at step 2: the person has it open and will mark what's wrong.
+3. Screenshot only **a new page or a frame you built**, once, scoped to it (`obeya shot <page> --frame <id>`, or the page), and read the PNG. After edits to an existing page, stop at step 2 and wait: they mark what's wrong.
 
 ## Topics: `obeya --skill <topic>`
 

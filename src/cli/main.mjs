@@ -23,7 +23,7 @@ import { sameDir, shotsDir } from "../lib/paths.mjs";
 import { findItem, instantiate } from "../lib/library.mjs";
 import { diagramElements, mermaidPatch, placement } from "../lib/mermaid.mjs";
 import { ensureLibrary } from "../lib/libcache.mjs";
-import { CliError, ensureBrowser, ensureServer, makeClient, openInBrowser, sleep } from "./client.mjs";
+import { CliError, ensureBrowser, ensureServer, makeClient, openInBrowser, sleep, tabsConnected } from "./client.mjs";
 import { resolvePort } from "./ports.mjs";
 import { resolveImages } from "./images.mjs";
 import { officialRender, withRenderer } from "./render.mjs";
@@ -185,7 +185,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     case "open": {
       const i = await ensureServer(plan, client, note);
       const url = client.canvasUrl(page, flags.frame);
-      if (i.browsers > 0) {
+      if (await tabsConnected(client, i)) {
         if (page) await client.call("POST", `/api/pages/${encodeURIComponent(page)}/show`, { frame: flags.frame });
         return { url, opened: false, ...(page ? { switched: true } : {}) };
       }
