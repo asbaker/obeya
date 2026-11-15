@@ -1154,10 +1154,37 @@ test("branding: the tab title and favicon, the mark in the pill, About obeya", {
   await until(() => A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "dark theme" });
   pr = await present();
   assert.ok(pr.ratio >= 4.5 && pr.sameAsPill, `dark: ${JSON.stringify(pr)}`);
-  // Back to light for the other tests (choosing a theme may leave the menu open).
-  if (!(await A.getByText("Light mode").isVisible())) await A.click(".main-menu-trigger");
+  // Our dialogs follow it: the page picker turns dark, its text and inputs readable.
+  const picker = () => A.evaluate(() => {
+    const lum = (s) => { const [r, g, b] = s.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (fg, bg) => { const [a, c] = [lum(fg), lum(bg)].sort((x, y) => y - x); return (a + 0.05) / (c + 0.05); };
+    const m = getComputedStyle(document.querySelector("[data-testid=page-picker]"));
+    const i = getComputedStyle(document.querySelector("[data-testid=page-picker] input"));
+    return { bg: lum(m.backgroundColor), text: ratio(m.color, m.backgroundColor), input: ratio(i.color, i.backgroundColor), inputBg: lum(i.backgroundColor) };
+  });
+  if (await A.getByText("Light mode").isVisible()) await A.keyboard.press("Escape");
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector("[data-testid=page-picker]");
+  let pk = await picker();
+  assert.ok(pk.bg < 0.05 && pk.inputBg < 0.05 && pk.text >= 7 && pk.input >= 7, `dark picker: ${JSON.stringify(pk)}`);
+  await A.keyboard.press("Escape");
+  // The theme outlives a refresh.
+  await A.reload();
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready after reload", timeout: 60000 });
+  await until(() => A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "still dark after reload" });
+  // Back to light for the other tests; the picker is light again, and so is the next load.
+  await A.click(".main-menu-trigger");
   await A.getByText("Light mode").click();
   await until(() => A.evaluate(() => !document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "light theme again" });
+  if (await A.getByText("Dark mode").isVisible()) await A.keyboard.press("Escape");
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector("[data-testid=page-picker]");
+  pk = await picker();
+  assert.ok(pk.bg > 0.9 && pk.text >= 7, `light picker: ${JSON.stringify(pk)}`);
+  await A.keyboard.press("Escape");
+  await A.reload();
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready after reload", timeout: 60000 });
+  assert.equal(await A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), false, "light after reload");
   await A.close();
 });
 

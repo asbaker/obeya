@@ -60,13 +60,23 @@ document.addEventListener("keydown", (ev) => {
   stepFrame(delta);
 }, true);
 
+// The theme the person picked (light or dark) outlives a refresh: this browser
+// remembers it. The export renderer always starts light.
+const THEME_KEY = "obeya.theme";
+const savedTheme = () => (!RENDERER && localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light");
+let themeNow = savedTheme();
+
 // Present is greyed out on a page without frames; its tooltip says why.
 let hasFramesNow = false;
-function onEditorChange(elements) {
+function onEditorChange(elements, appState) {
   const has = elements.some((e) => e.type === "frame" && !e.isDeleted);
   if (has !== hasFramesNow) {
     hasFramesNow = has;
     S.setUi((s) => ({ ...s, hasFrames: has }));
+  }
+  if (appState?.theme && appState.theme !== themeNow && !RENDERER) {
+    themeNow = appState.theme;
+    localStorage.setItem(THEME_KEY, themeNow);
   }
   onChange();
 }
@@ -152,6 +162,7 @@ function App() {
             console.error(err);
           }
         },
+        initialData: { appState: { theme: themeNow } },
         onChange: onEditorChange,
         onLinkOpen,
         generateLinkForSelection: (id) => linkForSelection(id),
