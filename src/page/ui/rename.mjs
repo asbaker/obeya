@@ -10,15 +10,18 @@ import { FolderField } from "./folder-field.mjs";
 const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 export function RenameDialog({ current, names, onClose }) {
-  const [name, setName] = React.useState(current ? baseName(current) : "");
-  const [folder, setFolder] = React.useState(current ? folderOf(current) : "");
+  const doc = current?.endsWith(".md"); // a markdown doc: the file moves; ".md" stays on the name
+  const shown = doc ? current.slice(0, -3) : current;
+  const [name, setName] = React.useState(shown ? baseName(shown) : "");
+  const [folder, setFolder] = React.useState(shown ? folderOf(shown) : "");
   const [error, setError] = React.useState(null);
   const [confirming, setConfirming] = React.useState(null); // {links} while asking to delete
   const submit = async () => {
-    const to = normalizePageName(joinName(folder, name.trim()));
+    const bare = normalizePageName(joinName(folder, name.trim().replace(/\.md$/, "")));
+    const to = doc ? `${bare}.md` : bare;
     if (!current || to === current) return onClose();
-    if (!name.trim()) return setError("Name the page.");
-    if (!validPageName(to)) return setError(NAME_RULE);
+    if (!name.trim()) return setError(doc ? "Name the doc." : "Name the page.");
+    if (!validPageName(bare)) return setError(NAME_RULE);
     try {
       await flushSync();
       const r = await postJSON(`/api/pages/${encodeURIComponent(current)}/rename`, { to });
@@ -31,7 +34,7 @@ export function RenameDialog({ current, names, onClose }) {
     }
   };
   const askDelete = async () => {
-    if (names.filter((n) => n !== current).length === 0) return setError("This is the only page; make another before deleting it.");
+    if (!doc && names.filter((n) => n !== current).length === 0) return setError("This is the only page; make another before deleting it.");
     // How many links on other pages point here, so the person knows what breaks.
     const links = await getJSON(`/api/pages/${encodeURIComponent(current)}/links`).then((r) => r.links.length).catch(() => null);
     setConfirming({ links });
@@ -52,7 +55,8 @@ export function RenameDialog({ current, names, onClose }) {
       h("header", null, h("h2", null, confirming ? `Delete ${current}?` : "Rename or move")),
       confirming
         ? h("div", { className: "xl-fields", "data-testid": "delete-confirm" },
-          h("p", null, "The page, its change log and bands move to ", h("code", null, ".obeya/.trash/"), " in the pages folder; nothing is erased."),
+          doc ? h("p", null, "The doc moves to ", h("code", null, ".obeya/.trash/"), " in the pages folder; nothing is erased.")
+            : h("p", null, "The page, its change log and bands move to ", h("code", null, ".obeya/.trash/"), " in the pages folder; nothing is erased."),
           confirming.links ? h("p", null, `${plural(confirming.links, "link")} on other pages point at it and will stop working.`) : null)
         : h("div", { className: "xl-fields" },
           h("label", { className: "xl-field" }, h("span", null, "Name"),
@@ -64,10 +68,10 @@ export function RenameDialog({ current, names, onClose }) {
       confirming
         ? h("footer", null, h("span"),
           h("span", null, h("button", { onClick: () => setConfirming(null), autoFocus: true }, "Keep it"), " ",
-            h("button", { className: "danger", onClick: doDelete, "data-testid": "delete-confirm-button" }, "Delete page")))
+            h("button", { className: "danger", onClick: doDelete, "data-testid": "delete-confirm-button" }, doc ? "Delete doc" : "Delete page")))
         : h("footer", null,
-          h("button", { className: "xl-delete", onClick: askDelete, "data-testid": "delete-page" }, "Delete page…"),
+          h("button", { className: "xl-delete", onClick: askDelete, "data-testid": "delete-page" }, doc ? "Delete doc…" : "Delete page…"),
           h("span", null, h("button", { onClick: onClose }, "Cancel"), " ",
             h("button", { className: "primary", onClick: submit, "data-testid": "rename-submit" },
-              folderOf(normalizePageName(joinName(folder, name.trim()))) !== folderOf(current ?? "") ? "Move" : "Rename")))));
+              folderOf(normalizePageName(joinName(folder, name.trim()))) !== folderOf(shown ?? "") ? "Move" : "Rename")))));
 }

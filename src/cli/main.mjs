@@ -231,7 +231,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     case "patch": {
       // Counts, not echoes: the agent knows the ids it sent. What it acts on is `warnings`;
       // what the editor did beyond the patch is in `changes --source agent --since <rev>`.
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, flags.style ? { ...patch, style: flags.style } : patch);
       return { rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, changed: r.changed.length, warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}) };
     }
     case "mermaid": {
@@ -247,7 +247,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const { skeleton, files, image } = mermaidPatch(converted, { prefix: flags.id, at, frame: where.frame });
       const old = diagramElements(scene.elements, flags.id).filter((e) => !(e.type === "text" && e.containerId)).map((e) => e.id);
       if (old.length) await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { delete: old });
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { skeleton, ...(Object.keys(files).length ? { files } : {}) });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { skeleton, ...(Object.keys(files).length ? { files } : {}), ...(flags.style ? { style: flags.style } : {}) });
       return {
         rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, removed: old.length,
         warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}), ...(image ? { image: true } : {}),
@@ -298,7 +298,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const prefix = flags.id ?? `${item.id.slice(0, 40)}-${Math.random().toString(36).slice(2, 6)}`;
       const [x, y] = flags.at.split(",").map(Number);
       const elements = instantiate(item, { at: [x, y], prefix, frame: flags.frame ?? null });
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { elements });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { elements, ...(flags.style ? { style: flags.style } : {}) });
       // The ids, because the agent didn't choose them; the size is in `library show`.
       return { rev: r.rev, ids: elements.map((e) => e.id) };
     }

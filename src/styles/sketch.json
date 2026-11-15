@@ -1,0 +1,9 @@
+{
+  "*": { "roughness": 1, "strokeWidth": 2, "strokeStyle": "solid" },
+  "rectangle": { "roundness": { "type": 3 } },
+  "diamond": { "roundness": { "type": 2 } },
+  "arrow": { "roundness": { "type": 2 } },
+  "line": { "roundness": { "type": 2 } },
+  "text": { "fontFamily": "Excalifont" },
+  "label": { "fontFamily": "Excalifont" }
+}

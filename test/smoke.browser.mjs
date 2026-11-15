@@ -799,7 +799,7 @@ test("pages: the picker, files added outside the server, rename from the menu", 
   await until(async () => (await pillCount()) === 2, { what: "a file added on disk appears", timeout: 5000 });
   await page.keyboard.press("ControlOrMeta+KeyO");
   await page.waitForSelector("[data-testid=page-picker]");
-  assert.deepEqual(await page.$$eval("[data-testid=picker-row]", (rows) => rows.map((r) => r.firstChild.firstChild.textContent)), ["board", "notes"]);
+  assert.deepEqual(await page.$$eval("[data-testid=picker-row]", (rows) => rows.map((r) => r.querySelector(".xl-base").textContent)), ["board", "notes"]);
   assert.deepEqual(await page.$$eval("[data-testid=picker-skipped]", (rows) => rows.map((r) => r.firstChild.textContent)), ["My|Diagram.excalidraw"]);
   // Search, then Enter opens the match.
   await page.keyboard.type("not");
@@ -1469,6 +1469,36 @@ test("re-applying a skeleton to reword a label keeps the element's frame, group,
   await A.close();
 });
 
+test("rewording a text through `elements` remeasures it: a label or free text isn't cut to its old width", { skip }, async () => {
+  const opened = await cli(["open", "reword", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "reword", "--file", "-"], { stdin: JSON.stringify(p) });
+  const all = async () => (await cli(["get", "reword", "--full"])).json.result.elements;
+  let r = await patch({ skeleton: [
+    { type: "rectangle", id: "box", x: 0, y: 0, width: 300, height: 80, label: { text: "project buf", fontSize: 26 } },
+    { type: "text", id: "ft", x: 0, y: 200, text: "short", fontSize: 26 },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  let els = await all();
+  const lid = els.find((e) => e.containerId === "box").id;
+  const before = { label: els.find((e) => e.id === lid).width, ft: els.find((e) => e.id === "ft").width };
+  r = await patch({ elements: [{ id: lid, text: "project buffer" }, { id: "ft", text: "a good deal longer than short" }] });
+  assert.equal(r.code, 0, r.stdout);
+  els = await all();
+  const label = els.find((e) => e.id === lid), ft = els.find((e) => e.id === "ft");
+  assert.deepEqual([label.text, label.originalText ?? label.text], ["project buffer", "project buffer"], "get leaves originalText out when it equals text");
+  assert.ok(label.width > before.label, `the label grew: ${before.label} → ${label.width}`);
+  assert.deepEqual([ft.text, ft.originalText ?? ft.text], ["a good deal longer than short", "a good deal longer than short"]);
+  assert.ok(ft.width > before.ft * 3, `the free text grew: ${before.ft} → ${ft.width}`);
+  await A.close();
+});
+
 test("frames by position: a new element inside a frame joins it, an edit moves it in or out; a patch that says where wins", { skip }, async () => {
   const opened = await cli(["open", "framepos", "--no-open"]);
   const u = new URL(opened.json.error?.url ?? opened.json.result.url);
@@ -1553,6 +1583,58 @@ test("an empty frame keeps the box it was given; defaults give new elements the 
   // Bad defaults are refused before anything changes.
   r = await patch({ defaults: { rectangle: "solid" }, skeleton: [] });
   assert.equal(r.json.error.code, "invalid_patch");
+  await A.close();
+});
+
+test("fonts: obeya's fonts in the font menu, by name in patches, measured in their own face, embedded in SVG exports", { skip }, async () => {
+  const opened = await cli(["open", "fonts", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "fonts");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const names = ["Inter", "Inter Bold", "Source Serif", "Barlow Condensed", "Caveat", "Helvetica"];
+  const r = await cli(["patch", "fonts", "--file", "-"], { stdin: JSON.stringify({
+    defaults: { text: { fontSize: 28 } },
+    skeleton: [
+      ...names.map((n, i) => ({ type: "text", id: `t${i}`, x: 0, y: i * 60, text: `${n}: Ship v0.3 · 1,284 runs → 93% ok`, fontFamily: n })),
+      { type: "rectangle", id: "box", x: 900, y: 0, width: 200, height: 120, label: { text: "A label in Barlow Condensed", fontFamily: "barlow condensed" } },
+    ],
+  }) });
+  assert.equal(r.code, 0, r.stdout);
+  const els = (await cli(["get", "fonts", "--full"])).json.result.elements;
+  assert.deepEqual(names.map((_, i) => els.find((e) => e.id === `t${i}`).fontFamily), [200, 201, 202, 203, 204, 2]);
+  assert.equal(els.find((e) => e.containerId === "box").fontFamily, 203);
+  // Measured in the font itself, not a fallback: the width matches the browser's own measure.
+  const widths = await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.type === "text" && !e.containerId).map((e) => {
+    const c = document.createElement("canvas").getContext("2d");
+    const name = { 200: "Inter", 201: "Inter Bold", 202: "Source Serif", 203: "Barlow Condensed", 204: "Caveat", 2: "Helvetica" }[e.fontFamily];
+    c.font = `${e.fontSize}px ${name}`;
+    return [e.id, Math.round(e.width), Math.round(c.measureText(e.text).width), document.fonts.check(c.font)];
+  }));
+  for (const [id, w, measured, loaded] of widths) {
+    assert.ok(loaded, `${id}: its font is loaded`);
+    assert.ok(Math.abs(w - measured) <= 2, `${id}: width ${w}, measured ${measured}`);
+  }
+  // The font menu lists them, and Helvetica and Cascadia without the "old" badge.
+  const t0 = await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "t0"));
+  const at = await A.evaluate(([x, y]) => window.obeyaTest.toClient(x, y), [t0.x + 10, t0.y + t0.height / 2]);
+  await A.mouse.click(at.x, at.y);
+  await A.locator('[data-testid="font-family-show-fonts"]').click();
+  const menu = A.locator(".dropdown-menu.fonts"); // a popover, outside the picker
+  await until(async () => (await menu.innerText()).includes("Caveat"), { what: "the font menu" });
+  const text = await menu.innerText();
+  for (const n of [...names, "Cascadia", "Excalifont"]) assert.ok(text.includes(n), `${n} in the font menu`);
+  assert.doesNotMatch(text, /\bold\b/i, "no \"old\" badge");
+  await A.keyboard.press("Escape");
+  // SVG exports carry the fonts with them.
+  const out = path.join(S.tmp, "fonts.svg");
+  const svg = await cli(["export", "fonts", "--format", "svg", "--out", out]);
+  assert.equal(svg.code, 0, svg.stdout);
+  const file = fs.readFileSync(out, "utf8");
+  for (const n of ["Inter", "Caveat", "Barlow Condensed"]) assert.match(file, new RegExp(`@font-face\\s*{\\s*font-family:\\s*"?${n}"?`), `${n} embedded`);
   await A.close();
 });
 
@@ -1649,5 +1731,144 @@ test("mermaid: a flowchart as editable elements with stable ids; re-running repl
   r = await cli(["mermaid", "mm", "--file", "-", "--id", "bad"], { stdin: "flowchart TD\n A[x] -->> B(\n" });
   assert.equal(r.json.error.code, "invalid_mermaid", r.stdout);
   assert.ok(!(await cli(["get", "mm"])).json.result.elements.some((e) => e.id.startsWith("bad-")));
+  await A.close();
+});
+
+test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a stage's medium; a full-frame background is locked; an id twice is refused", { skip }, async () => {
+  const opened = await cli(["open", "v03", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p, ...flags) => cli(["patch", "v03", "--file", "-", ...flags], { stdin: JSON.stringify(p) });
+  const order = async () => (await A.evaluate(() => window.obeyaTest.elements().map((e) => e.id)));
+  // A text drawn under a dark panel, then the frame redrawn the right way round.
+  let r = await patch({ skeleton: [{ type: "text", id: "T", x: 20, y: 20, text: "hello" }, { type: "rectangle", id: "R", x: 0, y: 0, width: 300, height: 200, backgroundColor: "#0f2a3a", fillStyle: "solid" }] });
+  assert.equal(r.code, 0, r.stdout);
+  r = await patch({ delete: ["T", "R"] });
+  r = await patch({ skeleton: [{ type: "rectangle", id: "R", x: 0, y: 0, width: 300, height: 200, backgroundColor: "#0f2a3a", fillStyle: "solid" }, { type: "text", id: "T", x: 20, y: 20, text: "hello", strokeColor: "#ffffff" }] });
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => { const o = await order(); return o.indexOf("R") < o.indexOf("T"); }, { what: "the redrawn text above its panel" });
+  // A stage's medium, a locked background, and pins.
+  r = await patch({ skeleton: [
+    { type: "frame", id: "fr", x: 1000, y: 0, width: 800, height: 500, name: "fr" },
+    { type: "rectangle", id: "fr-bg", x: 1000, y: 0, width: 800, height: 500, frameId: "fr", backgroundColor: "#f6f7f9", fillStyle: "solid" },
+    { type: "rectangle", id: "card", x: 1100, y: 100, width: 200, height: 100, frameId: "fr", label: { text: "card" } },
+  ], pins: { id: "rv", items: [{ on: "card", note: "Too small" }] } }, "--style", "sketch");
+  assert.equal(r.code, 0, r.stdout);
+  const els = await A.evaluate(() => window.obeyaTest.elements());
+  const by = (id) => els.find((e) => e.id === id);
+  assert.equal(by("fr-bg").locked, true, "a shape that fills its frame is locked");
+  assert.equal(by("card").roughness, 1, "the sketch medium");
+  assert.equal(els.find((e) => e.containerId === "card").fontFamily, 5, "Excalifont for labels");
+  assert.equal(by("rv-1").type, "ellipse");
+  assert.deepEqual(by("rv-1").customData, { pins: "rv", pin: 1, on: "card" });
+  assert.ok(by("rv-1-t").x > by("card").x + by("card").width, "the note beside the card");
+  r = await patch({ pins: { id: "rv", items: [{ on: "card", note: "Still small" }, { on: "fr-bg", note: "Nice" }] } });
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => (await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.customData?.pins === "rv" && e.customData.pin).length)) === 2, { what: "two pins" });
+  // Re-applying a free text's skeleton keeps its font, with or without a stage.
+  r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title", fontFamily: "Nunito", fontSize: 40 }] }, "--style", "clean");
+  const font = (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily));
+  r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title, again" }] }, "--style", "clean");
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").text)) === "Title, again", { what: "reworded" });
+  assert.equal(await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily), font, "the font is kept");
+  assert.equal(await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontSize), 40);
+  r = await patch({ skeleton: [{ type: "rectangle", id: "d", x: 0, y: 0 }, { type: "rectangle", id: "d", x: 9, y: 9 }] });
+  assert.equal(r.json.error.code, "invalid_patch");
+  await A.close();
+});
+
+test("docs: a .md opens read-only in the tab at a heading; links go both ways; raw HTML is text; it reloads when the file changes; swiping never goes Back", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const md = (extra = "") => `# Spec\n\nIntro <script>window.pwned = 1</script> <b>bold</b>.\n\n[the board](?page=docboard&element=f1) · [bad](javascript:alert(1)) · [next](#3-requirements)\n\n${"Filler line.\n\n".repeat(80)}## 3 Requirements\n\nThe list.${extra}\n\n${"More.\n\n".repeat(80)}`;
+  fs.writeFileSync(path.join(dir, "notes", "spec.md"), md());
+  let r = await cli(["patch", "docboard", "--file", "-", "--no-open"], { stdin: JSON.stringify({ skeleton: [{ type: "frame", id: "f1", x: 0, y: 0, width: 600, height: 400, name: "f1" }, { type: "rectangle", id: "go", x: 50, y: 50, width: 200, height: 80, frameId: "f1", link: "?page=notes%2Fspec.md#3-requirements" }] }) });
+  const opened = await cli(["open", "docboard", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/spec.md");
+  u.hash = "3-requirements";
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc shown", timeout: 60000 });
+  assert.equal(await A.evaluate(() => getComputedStyle(document.body).overscrollBehaviorX), "none");
+  await until(() => A.evaluate(() => { const h = document.getElementById("3-requirements"); return h && h.getBoundingClientRect().top < 200; }), { what: "scrolled to the heading" });
+  assert.equal(await A.evaluate(() => window.pwned), undefined, "a doc never runs its HTML");
+  assert.match(await A.evaluate(() => document.querySelector("#doc .doc-body").textContent), /<b>bold<\/b>/);
+  assert.equal(await A.evaluate(() => [...document.querySelectorAll("#doc a")].find((a) => a.textContent === "bad").hasAttribute("href")), false);
+  // The doc → the drawing's frame; Back → the doc again.
+  await A.click("#doc a:text('the board')");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-open") && window.obeyaTest.page() === "docboard"), { what: "the drawing" });
+  await A.goBack();
+  await until(() => A.evaluate(() => document.body.classList.contains("doc-open")), { what: "the doc after Back" });
+  // The file changes: the tab shows the new text.
+  fs.writeFileSync(path.join(dir, "notes", "spec.md"), md(" Updated on disk."));
+  await until(() => A.evaluate(() => document.querySelector("#doc .doc-body").textContent.includes("Updated on disk.")), { what: "the doc reloaded" });
+  // The picker lists it.
+  const listed = await A.evaluate(() => fetch("/api/pages").then((r) => r.json()).then((j) => j.docs));
+  assert.ok(listed.some((d) => d.name === "notes/spec.md" && d.words > 100), "listed, with a word count");
+  // The picker marks each row's kind, and a doc's grey line counts its words.
+  await A.click("[data-testid=page-pill]");
+  await until(() => A.evaluate(() => document.querySelector('[data-testid=picker-row][data-name="notes/spec.md"]')), { what: "the picker, with the doc" });
+  const kinds = await A.evaluate(() => [...document.querySelectorAll("[data-testid=picker-row]")].map((r) => [r.dataset.name, r.querySelector("svg.xl-kind")?.getAttribute("aria-label"), r.querySelector(".meta")?.textContent]));
+  const doc = kinds.find(([n]) => n === "notes/spec.md"), drawing = kinds.find(([n]) => !n.endsWith(".md"));
+  assert.ok(doc, JSON.stringify(kinds));
+  assert.equal(doc[1], "doc");
+  assert.match(doc[2], /\d words/);
+  assert.ok(drawing, JSON.stringify(kinds));
+  assert.equal(drawing[1], "drawing");
+  await A.keyboard.press("Escape");
+  // The menu on a doc is the doc's: new, open, rename, the theme, about; nothing from the canvas.
+  await A.click(".main-menu-trigger");
+  const items = await A.$$eval(".dropdown-menu-item", (els) => els.map((e) => e.textContent.trim()));
+  assert.deepEqual(items.map((t) => t.replace(/\s*(Cmd|Ctrl|Shift)\+.*$/, "")), ["New page…", "Open page…", "Rename or move this doc…", "Dark mode", "About obeya"]);
+  // Rename it from the menu: the file moves, the tab follows, .md stays.
+  await A.click("[data-testid=menu-rename]");
+  await A.fill("[data-testid=rename-name]", "renamed");
+  await A.click("[data-testid=rename-submit]");
+  await until(() => fs.existsSync(path.join(dir, "notes", "renamed.md")), { what: "the doc renamed on disk" });
+  await until(() => A.evaluate(() => new URLSearchParams(location.search).get("page") === "notes/renamed.md" && document.body.classList.contains("doc-open")), { what: "the tab following the rename" });
+  assert.equal(await A.evaluate(() => document.querySelector("[data-testid=pill-name]").textContent), "renamed.md");
+  // The theme item in the doc's menu turns the doc dark, and back.
+  const docBg = () => A.evaluate(() => getComputedStyle(document.getElementById("doc")).backgroundColor);
+  await A.click(".main-menu-trigger");
+  await A.getByText("Dark mode").click();
+  await until(async () => (await docBg()) === "rgb(18, 18, 18)", { what: "the doc turns dark" });
+  if (!(await A.getByText("Light mode").isVisible())) await A.click(".main-menu-trigger");
+  await A.getByText("Light mode").click();
+  await until(async () => (await docBg()) !== "rgb(18, 18, 18)", { what: "the doc turns light again" });
+  await A.close();
+});
+
+test("a server killed before it saves: an open tab sends back what it had newer, so deleted elements stay deleted", { skip }, async () => {
+  const opened = await cli(["open", "crash", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "crash");
+  const A = await S.context.newPage();
+  const patch = (p) => cli(["patch", "crash", "--file", "-"], { stdin: JSON.stringify(p) });
+  const ids = Array.from({ length: 12 }, (_, k) => `c${k}`);
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  let r = await patch({ skeleton: ids.map((id, k) => ({ type: "rectangle", id, x: k * 60, y: 0, width: 50, height: 50 })) });
+  assert.equal(r.code, 0, r.stdout);
+  await sleep(1500); // saved
+  r = await patch({ delete: ids.slice(0, 6) });
+  assert.equal(r.code, 0, r.stdout);
+  const pid = execFileSync("lsof", ["-ti", `tcp:${S.port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).trim().split("\n")[0];
+  process.kill(Number(pid), "SIGKILL"); // before the save
+  await sleep(300);
+  r = await cli(["serve"]);
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => {
+    const els = (await cli(["get", "crash"])).json?.result?.elements ?? [];
+    return els.length === 6 && els.every((e) => !ids.slice(0, 6).includes(e.id));
+  }, { what: "the server caught up from the tab", timeout: 20000 });
   await A.close();
 });

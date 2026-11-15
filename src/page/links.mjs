@@ -42,7 +42,8 @@ export function onLinkOpen(element, event) {
   event.preventDefault();
   // Hidden elements still receive clicks; only links inside the shown frame count.
   if (presenting() && S.focusedFrame && element.frameId !== S.focusedFrame && element.id !== S.focusedFrame) return;
-  if (page && page !== S.currentPage) openPage(page).then(() => goTo(target, { lock: presenting() }));
+  if (page && page.endsWith(".md")) openPage(page, null, { heading: url.hash ? decodeURIComponent(url.hash.slice(1)) : undefined });
+  else if (page && page !== S.currentPage) openPage(page).then(() => goTo(target, { lock: presenting() }));
   else goTo(target, { lock: presenting() });
 }
 

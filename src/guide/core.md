@@ -25,48 +25,51 @@ The server starts itself when needed and stops after 12 idle hours; a stopped se
 ## Read, cheapest first
 
 ```bash
-obeya pages                            # pages, frame counts, last edit
-obeya describe <page> --format text    # frames, elements, labels, ids: start here
-obeya get <page> --frame <id>          # boxes and coordinates, to place or move things
-obeya describe <page> --layout --frame <id>   # rows in reading order: an arrangement as text
-obeya lint <page>                      # overlaps, clipped text, misrouted arrows, contrast, …
+obeya pages                   # pages, frame counts, last edit
+obeya describe <page> --format text   # frames, elements, labels, ids: start here
+obeya get <page> --frame <id>  # boxes and coordinates, to place or move things
+obeya lint <page>             # overlaps, clipped text, misrouted arrows, contrast, …
 ```
 
 ## Patch
 
 `obeya patch <page> --file -` with JSON on stdin: `skeleton` creates, `elements` edits by `id`, `delete`, `toBack`/`toFront`, `layout` places things for you. **Run `obeya --skill patch` before your first patch**: shapes, examples, layout, and what the editor adjusts.
 
-- **Don't compute coordinates**: let `layout` place things (`place` in a frame, `align`, `distribute`, `grid`, `stack`).
-- **Over ~10 elements, or repetitive**: generate the patch with a short script; set base style once with `defaults` (`--skill patch`).
+- **Boards: don't compute coordinates**; `layout` places things (`place`, `align`, `grid`, `stack`). Mockups: a script.
+- **Over ~10 elements, or repetitive**: generate the patch with a short script; base style once via `defaults` (`--skill patch`).
 - Text goes inside shapes as a `label`; bind arrows with `start`/`end`; give a composite object one shared `groupIds`.
-- Read positions back after a patch; don't assume them. Fix the response's `warnings` in a follow-up patch.
+- Read positions back; don't assume them. Fix `warnings` in a follow-up patch.
 
 ## When to reach for what
 
 - **Before you rearrange** anything the person can see, read `obeya changes <page>`: they may have circled or annotated it. Move their marks with it, or ask (`--skill changes`).
 - **When the person says they changed something**, read `obeya changes <page>` and treat circles, arrows and notes as instructions.
 - **Whenever the person should look at a page**: after you change it for them, or it asks something (questions, triage, review, ranking). Start `obeya wait <page> --frame <id> --ask "…"` in the background, every round, instead of asking in chat: their marks come back when they press Done (`--skill wait`).
-- **Prefer real components** (icons, cloud and UI kits) over plain rectangles (`--skill library`).
+- **Pictures over text**: compose components (`--skill components`); icons from `--skill library`.
 - **Flowcharts, sequence, class, state, ER diagrams**: Mermaid via `obeya mermaid` (`--skill mermaid`).
+- **Sketch, clean or hifi** (asked, or exploring, converging, presenting): `--skill design` + `--skill <it>`, then `--style <it>`.
 
 ## Check your work
 
 1. Fix each patch's `warnings`.
-2. After a batch, `obeya lint <page>` (and `describe --layout --frame <id>` for a frame you arranged): far cheaper than a screenshot.
+2. After a batch, `obeya lint <page>` (and `describe --layout --frame <id>`): far cheaper than a screenshot.
 3. Screenshot only **a new page or a frame you built**, once, scoped to it (`obeya shot <page> --frame <id>`, or the page), and read the PNG. After edits to an existing page, stop at step 2 and wait: they mark what's wrong.
 
 ## Topics: `obeya --skill <topic>`
 
-- `patch`: shapes, examples, layout directives, groups, what the editor adjusts
-- `changes`: reading what the person did, `pointsAt`, bands, cursors
+- `patch`: shapes, examples, layout directives, pins, groups
+- `design`: thinking before you draw
+- `sketch`, `clean`, `hifi`: how far to take it
+- `components`: the parts drawings are made of
+- `changes`: what the person did, `pointsAt`, bands, cursors
 - `wait`: asking the person for something on a page; their changes on Done
 - `library`: components and icons from the Excalidraw catalogue
 - `mermaid`: diagrams from Mermaid text
-- `images`: local images and screenshots on a page
-- `prototype`: links between frames and pages (always relative), clickable areas, presenting
-- `export`: SVG, PNG, HTML slide deck, PDF
+- `images`: local images and screenshots
+- `prototype`: links between frames, pages and docs; clickable areas
+- `export`: SVG, PNG, HTML deck, PDF
 - `pages`: folders, renaming and moving pages
-- `server`: ports, tabs, starting and stopping, `--no-open`
+- `server`: ports, tabs, starting, stopping, `--no-open`
 - `safety`: what stays on this machine
 
 `obeya --skill all` prints this and every topic.

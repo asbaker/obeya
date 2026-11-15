@@ -42,6 +42,11 @@ a.xl-row { color: inherit; text-decoration: none; }
 .xl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .xl-row.hl { background: #f1f0ff; }
 .xl-row .meta { color: #868e96; font-size: 12px; white-space: nowrap; }
+/* A row's kind: drawing or doc, a quiet glyph before the name. */
+.xl-named { display: inline-flex; align-items: center; min-width: 0; }
+.xl-kind { flex: none; width: 18px; height: 18px; margin-right: 10px; fill: none; stroke: #868e96; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.xl-row.hl .xl-kind { stroke: #6965db; }
+.xl-recent a .xl-kind { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
 .xl-row .here { color: #6965db; font-size: 12px; margin-left: 8px; }
 .xl-row.skipped { cursor: default; color: #adb5bd; }
 .xl-hint { padding: 6px 10px; color: #c92a2a; font-size: 13px; }
@@ -162,3 +167,43 @@ body:has(.excalidraw.theme--dark) .xl-wait-done { background: #7950f2; }
 body:has(.excalidraw.theme--dark) .xl-wait-done:hover { background: #9775fa; }
 body:has(.excalidraw.theme--dark) .xl-wait-frame { border-color: #9775fa; }
 body:has(.excalidraw.theme--dark) .xl-pill .xl-pill-waiting { color: #b197fc; }
+
+/* A markdown doc, read-only, over the canvas (?page=<name>.md). It sits under
+   Excalidraw's UI layer (z 4), whose parts are hidden while it shows, all but
+   the page pill: the pill stays exactly where and how it is on a drawing. */
+#doc { display: none; position: fixed; inset: 0; z-index: 3; overflow: auto; background: #fff; color: #1d2330; outline: none;
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+body.doc-open #doc { display: block; }
+body.doc-open .layer-ui__wrapper { visibility: hidden; }
+body.doc-open .layer-ui__wrapper .excalidraw-ui-top-left { visibility: visible; }
+body.doc-open .layer-ui__wrapper__footer, body.doc-open .App-menu_bottom, body.doc-open .shapes-section, body.doc-open .layer-ui__wrapper__top-right, body.doc-open .welcome-screen-center { display: none !important; }
+/* A clear strip under the pill and the menu, so text scrolls away beneath it. */
+#doc .doc-top { position: sticky; top: 0; height: 72px; margin-bottom: -72px; z-index: 1;
+  background: linear-gradient(#fff 78%, rgba(255,255,255,0)); pointer-events: none; }
+#doc .doc-body { max-width: 860px; margin: 0 auto; padding: 88px 24px 96px; }
+#doc .doc-body h1, #doc .doc-body h2 { border-bottom: 1px solid #e2e5eb; padding-bottom: .3em; }
+#doc .doc-body h1, #doc .doc-body h2, #doc .doc-body h3 { line-height: 1.25; margin: 1.6em 0 .6em; scroll-margin-top: 64px; }
+#doc .doc-body h4, #doc .doc-body h5, #doc .doc-body h6 { scroll-margin-top: 64px; }
+#doc .doc-body a { color: #4f46e5; }
+#doc .doc-body code { font: 85% ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: .15em .35em; border-radius: 4px; }
+#doc .doc-body pre { background: #f6f7f9; padding: 14px 16px; border-radius: 8px; overflow: auto; }
+#doc .doc-body pre code { background: none; padding: 0; }
+#doc .doc-body table { border-collapse: collapse; display: block; overflow: auto; margin: 1em 0; }
+#doc .doc-body th, #doc .doc-body td { border: 1px solid #e2e5eb; padding: 6px 12px; vertical-align: top; }
+#doc .doc-body th { background: #f6f7f9; }
+#doc .doc-body blockquote { margin: 1em 0; padding: 0 1em; color: #5b6475; border-left: 4px solid #e2e5eb; }
+#doc .doc-body img { max-width: 100%; }
+
+/* A sideways two-finger pan on a trackpad pans the canvas, never Back/Forward. */
+html, body { overscroll-behavior-x: none; }
+
+/* A doc in the dark theme: it follows the theme picked on the drawings. */
+body:has(.excalidraw.theme--dark) #doc { background: #121212; color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .doc-top { background: linear-gradient(#121212 78%, rgba(18,18,18,0)); }
+body:has(.excalidraw.theme--dark) #doc .doc-body a { color: #a5b4fc; }
+body:has(.excalidraw.theme--dark) #doc .doc-body h1, body:has(.excalidraw.theme--dark) #doc .doc-body h2 { border-bottom-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .doc-body code { background: #26262b; }
+body:has(.excalidraw.theme--dark) #doc .doc-body pre { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .doc-body th, body:has(.excalidraw.theme--dark) #doc .doc-body td { border-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .doc-body th { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .doc-body blockquote { color: #a1a1aa; border-left-color: #3a3a40; }

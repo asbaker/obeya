@@ -16,7 +16,7 @@ const skipFolder = (name) => name.startsWith(".") || name === "node_modules";
  * if the path isn't a valid page name]. Symlinked folders aren't followed, so
  * nothing outside `dir` is read.
  */
-function walk(dir, rel = "", out = []) {
+function walk(dir, rel = "", out = [], ext = EXT) {
   let entries;
   try {
     entries = fs.readdirSync(path.join(dir, rel), { withFileTypes: true });
@@ -26,13 +26,19 @@ function walk(dir, rel = "", out = []) {
   for (const d of entries) {
     const r = rel ? `${rel}/${d.name}` : d.name;
     if (d.isDirectory()) {
-      if (!skipFolder(d.name)) walk(dir, r, out);
-    } else if (d.isFile() && d.name.endsWith(EXT)) {
-      const name = normalizePageName(r.slice(0, -EXT.length));
+      if (!skipFolder(d.name)) walk(dir, r, out, ext);
+    } else if (d.isFile() && d.name.endsWith(ext)) {
+      const name = normalizePageName(r.slice(0, -ext.length));
       out.push([r, validPageName(name) ? name : null]);
     }
   }
   return out;
+}
+
+/** Words in a markdown doc, the way a reader counts them: code fences, link targets and markup left out. */
+export function countWords(md) {
+  const text = md.replace(/```[\s\S]*?```/g, " ").replace(/\]\([^)]*\)/g, "] ").replace(/<[^>]+>/g, " ").replace(/[#>*_`|\-]+/g, " ");
+  return (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’.,:]*/gu) ?? []).length;
 }
 
 const pageError = (code, message) => Object.assign(new Error(message), { code });
@@ -109,6 +115,43 @@ export class PageStore {
     // decides, so a page deleted on disk (git, another program) drops out.
     for (const [name, p] of this.pages) if (p.byId.size && !p.onDisk) names.add(name);
     return [...names].sort();
+  }
+
+  /**
+   * Markdown docs below the pages folder (shown read-only in the tab, beside
+   * the drawings): [{name: "v0.3/spec.md", modified}]. Names follow the page
+   * rule, with ".md" kept so a doc and a drawing can share a base name.
+   */
+  docs() {
+    this.docWords ??= new Map(); // file → {mtimeMs, words}, so a listing doesn't re-read unchanged docs
+    return walk(this.dir, "", [], ".md").filter(([, n]) => n).map(([rel, n]) => {
+      let modified = null, words = 0;
+      try {
+        const file = path.join(this.dir, rel), st = fs.statSync(file);
+        modified = st.mtime.toISOString();
+        const known = this.docWords.get(file);
+        if (known?.mtimeMs === st.mtimeMs) words = known.words;
+        else if (st.size <= 2 * 1024 * 1024) {
+          words = countWords(fs.readFileSync(file, "utf8"));
+          this.docWords.set(file, { mtimeMs: st.mtimeMs, words });
+        }
+      } catch {}
+      return { name: `${n}.md`, modified, words };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** A doc's text, or null if there's no such doc. Only names the page rule allows, so nothing outside the folder. */
+  doc(name) {
+    name = normalizePageName(name);
+    if (typeof name !== "string" || !name.endsWith(".md") || !validPageName(name.slice(0, -3))) return null;
+    const file = path.join(this.dir, name);
+    try {
+      const st = fs.statSync(file);
+      if (!st.isFile() || st.size > 2 * 1024 * 1024) return null;
+      return fs.readFileSync(file, "utf8");
+    } catch {
+      return null;
+    }
   }
 
   /** A page for the page picker: its revision, how many frames it has, and when its file last changed. */
@@ -304,6 +347,35 @@ export class PageStore {
     }
     this.pages.set(to, this.pages.get(from));
     this.pages.delete(from);
+  }
+
+  /** Whether a markdown doc exists (a file named by the page rule plus ".md"). */
+  docExists(name) {
+    return typeof name === "string" && name.endsWith(".md") && validPageName(name.slice(0, -3)) && isFile(path.join(this.dir, name));
+  }
+
+  /** Rename or move a markdown doc. Same rules as a page: a valid name, no clash, folders made and pruned. */
+  renameDoc(from, to) {
+    if (!to.endsWith(".md")) to += ".md";
+    if (!validPageName(to.slice(0, -3))) throw pageError("bad_page_name", `bad doc name "${to}"`);
+    if (!this.docExists(from)) throw pageError("unknown_page", `no doc "${from}"`);
+    this.#refuseSymlinks(to.slice(0, -3));
+    const sameFile = to.toLowerCase() === from.toLowerCase();
+    if (!sameFile && fs.existsSync(path.join(this.dir, to))) throw pageError("page_exists", `doc "${to}" already exists`);
+    fs.mkdirSync(path.dirname(path.join(this.dir, to)), { recursive: true });
+    fs.renameSync(path.join(this.dir, from), path.join(this.dir, to));
+    this.#pruneFolders(from.slice(0, -3));
+    return to;
+  }
+
+  /** Delete a markdown doc: it moves to .obeya/.trash/<time>/, nothing is erased. */
+  deleteDoc(name) {
+    if (!this.docExists(name)) throw pageError("unknown_page", `no doc "${name}"`);
+    const to = path.join(trashDir(this.dir), this.now().replace(/[:.]/g, "-"), name);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.renameSync(path.join(this.dir, name), to);
+    this.#pruneFolders(name.slice(0, -3));
+    return path.dirname(to);
   }
 
   /**

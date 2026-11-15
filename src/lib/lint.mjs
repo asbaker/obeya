@@ -43,6 +43,15 @@ export function contrast(fg, bg) {
   if (a === null || b === null) return null;
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
+// A colour with alpha (#rrggbbaa) laid over another: the colour you actually see, as #rrggbb.
+function over(top, below) {
+  const m = /^#([0-9a-f]{6})([0-9a-f]{2})$/i.exec(top ?? "");
+  if (!m) return top;
+  const a = parseInt(m[2], 16) / 255;
+  const rgb = (c) => { const h = /^#([0-9a-f]{3}|[0-9a-f]{6})/i.exec(c ?? "#ffffff")?.[1] ?? "ffffff"; const x = h.length === 3 ? [...h].map((d) => d + d).join("") : h; return [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16)); };
+  const [t, b] = [rgb(`#${m[1]}`), rgb(below)];
+  return "#" + t.map((v, i) => Math.round(v * a + b[i] * (1 - a)).toString(16).padStart(2, "0")).join("");
+}
 const gap = (a, b) => Math.hypot(Math.max(0, a.x1 - b.x2, b.x1 - a.x2), Math.max(0, a.y1 - b.y2, b.y1 - a.y2));
 
 // What to do about each rule. A response states it once per rule present
@@ -99,6 +108,8 @@ export function lint(elements, { frame, rules = RULES } = {}) {
         // Different frames clip their contents apart; something in no frame is
         // drawn over every frame, so it can still sit on a framed element.
         if ((a.frameId && b.frameId && a.frameId !== b.frameId) || sharesGroup(a, b)) continue;
+        // A numbered pin sits on its element's corner on purpose.
+        if (a.customData?.pin || b.customData?.pin) continue;
         const A = box.get(a.id), B = box.get(b.id);
         if (sameBox(A, B)) {
           add("overlap", [a, b], { stacked: true });
@@ -274,8 +285,18 @@ export function lint(elements, { frame, rules = RULES } = {}) {
       const c = t.containerId && byId.get(t.containerId);
       // What's behind it: its container's fill, else the topmost filled shape under it, else the canvas.
       let under = c && filled(c) && c.type !== "image" ? c : null;
-      if (!under && !c) under = objects.filter((s) => s !== t && filled(s) && s.type !== "image" && order.get(s.id) < order.get(t.id) && inside(T, box.get(s.id), TOL)).sort((a, b) => order.get(b.id) - order.get(a.id))[0] ?? null;
-      const ratio = contrast(t.strokeColor ?? "#1e1e1e", under?.backgroundColor ?? "#ffffff");
+      // A clear container shows what's behind it: look under the container, not just white.
+      const base = c || t, B = box.get(base.id);
+      if (!under) under = objects.filter((s) => s !== t && s !== c && filled(s) && s.type !== "image" && order.get(s.id) < order.get(base.id) && inside(B, box.get(s.id), TOL)).sort((a, b) => order.get(b.id) - order.get(a.id))[0] ?? null;
+      // A tint with alpha shows what's under it: blend it over the next filled shape (or white).
+      let bg = under?.backgroundColor ?? "#ffffff";
+      for (let s = under, depth = 0; s && /^#[0-9a-f]{8}$/i.test(bg) && depth < 4; depth++) {
+        const S = box.get(s.id);
+        const next = objects.filter((o) => o !== s && o !== t && o !== c && filled(o) && o.type !== "image" && order.get(o.id) < order.get(s.id) && inside(S, box.get(o.id), TOL)).sort((a, b) => order.get(b.id) - order.get(a.id))[0];
+        bg = over(bg, next?.backgroundColor && !/^#[0-9a-f]{8}$/i.test(next.backgroundColor) ? next.backgroundColor : "#ffffff");
+        s = null;
+      }
+      const ratio = contrast(t.strokeColor ?? "#1e1e1e", bg);
       const subject = c || t;
       if (ratio !== null && ratio < MIN_CONTRAST) add("contrast", under ? [subject, under].filter((e, i, a) => a.indexOf(e) === i) : [subject], { ratio: Math.floor(ratio * 10) / 10 });
     }

@@ -3,7 +3,8 @@
 // No session token: the server only answers this origin. Links from
 // versions before 0.1 carry #token=…; drop it, and the token they stored.
 export const params = new URLSearchParams(location.search);
-if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+// A doc's heading (?page=spec.md#3-requirements) keeps its hash.
+if (location.hash.startsWith("#token=")) history.replaceState(null, "", location.pathname + location.search);
 // Excalidraw looks up ?element= in its empty first scene and toasts "Linked
 // object wasn't found"; we jump to it ourselves once the page loads (openPage).
 if (params.has("element")) {

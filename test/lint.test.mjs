@@ -150,6 +150,15 @@ test("contrast: text on its container's fill, or on the filled shape under it", 
   assert.deepEqual(rules(els, { rules: ["contrast"] }), [["contrast", "a"], ["contrast", "h", "col"]]);
 });
 
+test("contrast: a label in a clear box is read against the shape behind the box, and still flagged when that's too light", () => {
+  const dark = [box("panel", 0, 0, { width: 400, height: 300, backgroundColor: "#1e3a8a" }), box("clear", 20, 20), { ...label("w", "clear", 30, 40, 80, 20), strokeColor: "#ffffff" }];
+  assert.deepEqual(rules(dark, { rules: ["contrast"] }), [], "white on the navy panel behind a clear box is fine");
+  const light = [box("panel", 0, 0, { width: 400, height: 300, backgroundColor: "#f1f3f5" }), box("clear", 20, 20), { ...label("w", "clear", 30, 40, 80, 20), strokeColor: "#ffffff" }];
+  assert.deepEqual(rules(light, { rules: ["contrast"] }), [["contrast", "clear", "panel"]], "white on a pale panel is still too light");
+  const tint = [box("chip", 0, 0, { backgroundColor: "#34d39926" }), { ...label("c", "chip", 10, 20, 80, 20), strokeColor: "#047857" }];
+  assert.deepEqual(rules(tint, { rules: ["contrast"] }), [], "a see-through tint is read blended over white, not as solid colour");
+});
+
 test("unframed: wholly inside a frame without being in it; a label in another frame than its shape", () => {
   const els = [frame("f", 0, 0, 800, 600), box("in", 10, 10, { frameId: "f" }), box("lost", 200, 200), box("half", 750, 10),
     box("c", 400, 10, { frameId: "f" }), label("l", "c", 410, 20, 80, 20)];

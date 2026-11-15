@@ -11,6 +11,7 @@ import { presenting, setPresent, stepFrame, togglePresent } from "./present.mjs"
 import { linkForSelection, onLinkOpen } from "./links.mjs";
 import { loadLibraries } from "./render.mjs";
 import { installTestHooks } from "./test-hooks.mjs";
+import { loadFonts, registerFonts } from "./fonts.mjs";
 import { PagePicker } from "./ui/page-picker.mjs";
 import { RenameDialog } from "./ui/rename.mjs";
 import { ExportDialog } from "./ui/export-dialog.mjs";
@@ -30,7 +31,7 @@ document.addEventListener("keydown", (ev) => {
   if (mod && ev.shiftKey && !ev.altKey && ev.code === "KeyE") {
     ev.preventDefault();
     ev.stopPropagation();
-    S.openExport();
+    if (!document.body.classList.contains("doc-open")) S.openExport(); // a doc has nothing to export
     return;
   }
   if (mod && !ev.shiftKey && !ev.altKey && ev.code === "KeyO") {
@@ -141,9 +142,10 @@ function App() {
         onInitialize: async (a) => {
           S.api = a;
           try {
+            await loadFonts(); // before the first page or patch measures any text
             const { pages } = await getJSON("/api/pages");
             const start = params.get("page") || pages[0]?.name;
-            if (start) await openPage(start, params.get("element"));
+            if (start) await openPage(start, params.get("element"), { heading: location.hash ? decodeURIComponent(location.hash.slice(1)) : undefined });
             connectEvents();
             loadLibraries();
           } catch (err) {
@@ -159,24 +161,34 @@ function App() {
         renderTopRightUI: present,
         UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false } },
       },
-        h(MainMenu, null,
-          // File-menu order: new, open, rename; then what to do with this page.
-          h(MainMenu.Group, { title: "obeya" },
-            h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
-            h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
-            h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this page…"),
+        // On a markdown doc the menu is the doc's: new, open, rename, about.
+        ui.page?.endsWith(".md")
+          ? h(MainMenu, null,
+            h(MainMenu.Group, { title: "obeya" },
+              h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
+              h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
+              h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this doc…"),
+              h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false })),
             h(MainMenu.Separator),
-            h(MainMenu.Item, { onSelect: S.openExport, shortcut: KEY_EXPORT, "data-testid": "menu-export" }, "Export…"),
-            h(MainMenu.Item, { onSelect: togglePresent, shortcut: KEY_PRESENT, "data-testid": "menu-present" }, "Present")),
-          h(MainMenu.Separator),
-          h(MainMenu.DefaultItems.SearchMenu),
-          h(MainMenu.DefaultItems.CommandPalette),
-          h(MainMenu.DefaultItems.Help),
-          h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"),
-          h(MainMenu.DefaultItems.ClearCanvas),
-          h(MainMenu.Separator),
-          h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false }),
-          h(MainMenu.DefaultItems.ChangeCanvasBackground)),
+            h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"))
+          : h(MainMenu, null,
+            // File-menu order: new, open, rename; then what to do with this page.
+            h(MainMenu.Group, { title: "obeya" },
+              h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
+              h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
+              h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this page…"),
+              h(MainMenu.Separator),
+              h(MainMenu.Item, { onSelect: S.openExport, shortcut: KEY_EXPORT, "data-testid": "menu-export" }, "Export…"),
+              h(MainMenu.Item, { onSelect: togglePresent, shortcut: KEY_PRESENT, "data-testid": "menu-present" }, "Present")),
+            h(MainMenu.Separator),
+            h(MainMenu.DefaultItems.SearchMenu),
+            h(MainMenu.DefaultItems.CommandPalette),
+            h(MainMenu.DefaultItems.Help),
+            h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"),
+            h(MainMenu.DefaultItems.ClearCanvas),
+            h(MainMenu.Separator),
+            h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false }),
+            h(MainMenu.DefaultItems.ChangeCanvasBackground)),
         RENDERER ? null : welcome(ui.page))),
     ui.present && ui.presentPos ? h(PresentControls, { pos: ui.presentPos }) : null,
     !RENDERER && !ui.present && ui.waits.some((w) => w.page === ui.page) ? h(WaitBanner, { waits: ui.waits.filter((w) => w.page === ui.page) }) : null,
@@ -187,6 +199,7 @@ function App() {
     dialog === "about" ? h(AboutDialog, { onClose: closeDialog }) : null);
 }
 
+registerFonts(); // before Excalidraw mounts: its font menu reads the list once
 createRoot(document.getElementById("root")).render(h(App));
 window.addEventListener("pagehide", () => flushSync({ keepalive: true }));
 installTestHooks();

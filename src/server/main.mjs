@@ -41,7 +41,7 @@ const HOST = "127.0.0.1";
 const IDLE_MINUTES = Number(opts["idle-timeout"] ?? DEFAULT_IDLE_MINUTES);
 const EXIT_PORT_IN_USE = 3; // the CLI maps this to error code port_in_use
 // Pure modules the page shares with the CLI and server, served from /lib/ (an allowlist, never a path).
-const PAGE_MODULES = new Set(["layout", "geometry", "merge", "names", "machine", "page-machines"]);
+const PAGE_MODULES = new Set(["layout", "geometry", "merge", "names", "machine", "page-machines", "fonts", "docs"]);
 
 // Change logs, cursors and bands from before the rename carry over.
 if (migrateSidecar(DIR)) console.log(`${new Date().toISOString()} moved .excalidraw-local/ to .obeya/`);
@@ -77,6 +77,9 @@ const server = http.createServer(async (req, res) => {
         const type = { mjs: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", svg: "image/svg+xml", png: "image/png" }[own[2]];
         return sendFile(res, path.join(SRC, "page", `${own[1]}.${own[2]}`), type);
       }
+      // The fonts obeya ships (src/page/fonts): a fixed shape of name, never a free path.
+      const font = /^\/page\/fonts\/([a-z][a-z-]*)\.woff2$/.exec(url.pathname)?.[1];
+      if (font && fs.existsSync(path.join(SRC, "page", "fonts", `${font}.woff2`))) return sendFile(res, path.join(SRC, "page", "fonts", `${font}.woff2`), "font/woff2");
       // Browsers ask for /favicon.ico on their own (and remember the answer): the logo.
       if (url.pathname === "/favicon.ico") return sendFile(res, path.join(SRC, "page", "favicon.png"), "image/png");
       if (url.pathname === "/events") return tabs.connect(req, res, url);

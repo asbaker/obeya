@@ -11,6 +11,23 @@ import { focusFrame } from "./present.mjs";
 import { bindArrow, splitArrowBindings } from "./arrows.mjs";
 import { toast } from "./ui/common.mjs";
 
+// New wording for a text that exists, measured the way a skeleton would be: a
+// label wrapped to its shape, free text at its size. Returns the fields to set.
+const TEXT_LOOK = ["fontSize", "fontFamily", "textAlign", "verticalAlign", "lineHeight"];
+function remeasure(t, box) {
+  const look = Object.fromEntries(TEXT_LOOK.filter((k) => t[k] !== undefined).map((k) => [k, t[k]]));
+  try {
+    if (box && box.type !== "arrow") {
+      const [, label] = convertToExcalidrawElements([{ type: box.type, id: "remeasure", x: box.x, y: box.y, width: box.width, height: box.height, label: { text: t.text, ...look } }], { regenerateIds: false });
+      if (label?.type === "text") return { text: label.text, originalText: t.text, width: label.width, height: label.height, x: label.x, y: label.y };
+    } else if (!box) {
+      const [m] = convertToExcalidrawElements([{ type: "text", id: "remeasure", x: t.x, y: t.y, text: t.text, ...look }], { regenerateIds: false });
+      if (m) return { originalText: t.text, width: m.width, height: m.height };
+    }
+  } catch {}
+  return { originalText: t.text };
+}
+
 // --- where a patch is applied ------------------------------------------------------
 // The visible editor, for the page on screen; an invisible second editor for any
 // other page. Both expose the same small interface to the patch code.
@@ -110,6 +127,13 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     const skel = split.skeleton.map((sk) => {
       // The converter throws on a frame without `children`: an empty frame is fine.
       if (sk?.type === "frame" && !Array.isArray(sk.children)) sk = { ...sk, children: [] };
+      // Re-applying a free text that exists keeps its type the same way: a
+      // skeleton that leaves out the font doesn't fall back to Excalidraw's.
+      if (sk?.type === "text" && live(sk.id)) {
+        const cur = byId.get(sk.id), keep = {};
+        for (const k of ["fontSize", "fontFamily", "textAlign", "verticalAlign", "lineHeight"]) if (!(k in sk) && cur[k] !== undefined) keep[k] = cur[k];
+        return { ...sk, ...keep };
+      }
       if (!sk?.label || !byId.has(sk.id)) return sk;
       const old = scene.find((e) => e.type === "text" && e.containerId === sk.id && !e.isDeleted);
       if (!old) return sk;
@@ -189,7 +213,16 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
         if (el.type === "frame" && given && !given.children?.length) {
           for (const k of ["x", "y", "width", "height"]) if (typeof given[k] === "number") el = { ...el, [k]: given[k] };
         }
-        if (!cur || cur.isDeleted) created.push(el.id); // a deleted id brought back is new again
+        if (!cur || cur.isDeleted) {
+          // A deleted id brought back is new again, and stacks like new: on top, in
+          // the patch's order. Keeping the deleted element's old place made a
+          // redrawn frame keep its old stacking, and hid text under shapes.
+          created.push(el.id);
+          if (cur) {
+            out.delete(el.id);
+            el = { ...el, index: null };
+          }
+        }
         else if (given) {
           const kept = {};
           for (const k of KEPT_ON_RESKELETON) if (!(k in given) && k in cur) kept[k] = cur[k];
@@ -219,6 +252,9 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     const raw = elements.map((p) => {
       const cur = byId.get(p.id);
       if (!cur) created.push(p.id);
+      // New wording: restoreElements doesn't remeasure in this build, so the old
+      // width stays and the canvas cuts the new words off. Measure it here.
+      if (cur?.type === "text" && "text" in p && !("originalText" in p)) p = { ...p, ...remeasure({ ...cur, ...p }, byId.get(cur.containerId)) };
       return cur ? { ...cur, ...p, version: cur.version + 1, versionNonce: nonce() } : p;
     });
     if (raw.length) {

@@ -18,6 +18,15 @@ function edited(iso) {
   return `edited ${new Date(iso).toLocaleDateString()}`;
 }
 
+// What kind of page a row is: a drawing (a frame with a shape in it) or a
+// markdown doc (a page with lines). Same grey, same box, so neither shouts.
+const ICON = {
+  drawing: '<rect x="2.5" y="4" width="15" height="12" rx="2.5"/><circle cx="6.75" cy="8.25" r="1.75"/><path d="M9.5 12.5h5"/>',
+  doc: '<rect x="4.5" y="2.5" width="11" height="15" rx="2"/><path d="M7.5 7h5M7.5 10h5M7.5 13h3"/>',
+};
+export const kindIcon = (doc) => h("svg", { className: "xl-kind", viewBox: "0 0 20 20", "aria-label": doc ? "doc" : "drawing", "data-testid": doc ? "kind-doc" : "kind-drawing",
+  dangerouslySetInnerHTML: { __html: doc ? ICON.doc : ICON.drawing } });
+
 export function PagePicker({ pages, skipped, current, waiting = new Set(), onClose, onNew }) {
   const [query, setQuery] = React.useState("");
   const [hl, setHl] = React.useState(0);
@@ -25,7 +34,8 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
   // Details (frame counts, times) when it opens, and again when the list changes.
   React.useEffect(() => { getJSON("/api/pages").then(setFresh).catch(() => {}); }, [pages, skipped]);
   React.useEffect(() => { document.querySelector(".xl-row.hl")?.scrollIntoView({ block: "nearest" }); });
-  const list = fresh?.pages ?? pages, skip = fresh?.skipped ?? skipped;
+  // Drawings and markdown docs (read-only), in one list.
+  const list = [...(fresh?.pages ?? pages), ...(fresh?.docs ?? []).map((d) => ({ ...d, doc: true }))], skip = fresh?.skipped ?? skipped;
   const names = list.map((p) => p.name);
   const byName = new Map(list.map((p) => [p.name, p]));
   const here = folderOf(current ?? "");
@@ -76,7 +86,7 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
     ev.preventDefault();
     go(name);
   };
-  const meta = (p) => `${p.frames} frame${p.frames === 1 ? "" : "s"} · ${edited(p.modified)}`;
+  const meta = (p) => (p.doc ? `${(p.words ?? 0).toLocaleString()} word${p.words === 1 ? "" : "s"} · ${edited(p.modified)}` : `${p.frames} frame${p.frames === 1 ? "" : "s"} · ${edited(p.modified)}`);
   let i = -1;
   const row = (b) => {
     if (b.heading) {
@@ -92,7 +102,7 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
     },
       b.create
         ? h("span", null, "+ New page ", h("b", null, baseName(b.name)))
-        : h("span", null, h("span", { className: "xl-base" }, baseName(b.name)), b.name === current ? h("span", { className: "here" }, "open now") : null,
+        : h("span", { className: "xl-named" }, kindIcon(p?.doc), h("span", { className: "xl-base" }, baseName(b.name)), b.name === current ? h("span", { className: "here" }, "open now") : null,
           waiting.has(b.name) ? h("span", { className: "xl-waiting", "data-testid": "picker-waiting", title: "Your agent is waiting for you on this page" }, "● waiting for you") : null,
           b.showFolder && folderOf(b.name) ? h("span", { className: "xl-in" }, folderOf(b.name).split("/").join(" / ")) : null),
       h("span", { className: "meta" }, b.create ? (folderOf(b.name) ? `saved now, in ${folderOf(b.name)}` : "saved now, empty") : meta(p)));
@@ -103,12 +113,12 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
         h("span", null,
           h("span", { className: "xl-muted" }, `${list.length} page${list.length === 1 ? "" : "s"}`), " ",
           h("button", { className: "xl-new", onClick: () => onNew(here), "data-testid": "picker-new", title: "New page" }, "+ New"))),
-      h("input", { autoFocus: true, value: query, placeholder: "Search pages, or type a new page name…", "aria-label": "Search pages", "data-testid": "picker-search",
+      h("input", { autoFocus: true, value: query, placeholder: "Search pages, or type a new drawing's name…", "aria-label": "Search pages", "data-testid": "picker-search",
         onChange: (ev) => { setQuery(ev.target.value); setHl(0); }, onKeyDown: onKey }),
       h("div", { className: "xl-list" },
         recent.length ? h(React.Fragment, null,
           h("div", { className: "xl-section" }, "Recent"),
-          h("div", { className: "xl-recent" }, recent.map((n) => h("a", { key: n, href: href(n), title: n, onClick: follow(n), "data-testid": "picker-recent" }, n)))) : null,
+          h("div", { className: "xl-recent" }, recent.map((n) => h("a", { key: n, href: href(n), title: n, onClick: follow(n), "data-testid": "picker-recent" }, kindIcon(byName.get(n)?.doc), n)))) : null,
         h("div", { className: "xl-section" }, q ? "Matches" : "All pages · A–Z"),
         blocks.map(row),
         typed && !items.length ? h("div", { className: "xl-hint" }, `No page matches. ${NAME_RULE}`) : null,

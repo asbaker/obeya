@@ -1,0 +1,9 @@
+{
+  "*": { "roughness": 0, "strokeWidth": 1, "strokeStyle": "solid" },
+  "rectangle": { "roundness": { "type": 3 } },
+  "diamond": { "roundness": { "type": 2 } },
+  "arrow": { "roundness": null },
+  "line": { "roundness": null },
+  "text": { "fontFamily": "Helvetica" },
+  "label": { "fontFamily": "Helvetica" }
+}
