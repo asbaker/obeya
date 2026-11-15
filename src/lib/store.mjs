@@ -368,6 +368,30 @@ export class PageStore {
     return to;
   }
 
+  /**
+   * Save a doc edited in the tab. `base` is the text the tab started from: if
+   * the file no longer holds it (the agent wrote it meanwhile), nothing is
+   * written and {code: doc_changed, text} is thrown, so the tab can merge.
+   * Written to a temp file, then renamed.
+   */
+  writeDoc(name, text, base) {
+    if (!this.docExists(name)) throw pageError("unknown_page", `no doc "${name}"`);
+    this.#refuseSymlinks(name.slice(0, -3));
+    const now = this.doc(name);
+    if (now === null) throw pageError("unknown_page", `no doc "${name}"`);
+    if (now !== base) throw Object.assign(pageError("doc_changed", `"${name}" changed on disk since the tab loaded it`), { text: now });
+    if (now !== text) writeAtomic(this.dir, path.join(this.dir, name), text);
+  }
+
+  /** Make a new doc now: `# <its name>` and a blank line. Throws {code} page_exists / bad_page_name. */
+  createDoc(name) {
+    if (typeof name !== "string" || !name.endsWith(".md") || !validPageName(name.slice(0, -3))) throw pageError("bad_page_name", `bad doc name "${name}"`);
+    this.#refuseSymlinks(name.slice(0, -3));
+    if (fs.existsSync(path.join(this.dir, name))) throw pageError("page_exists", `doc "${name}" already exists`);
+    const title = name.slice(0, -3).split("/").pop();
+    writeAtomic(this.dir, path.join(this.dir, name), `# ${title}\n\n`);
+  }
+
   /** Delete a markdown doc: it moves to .obeya/.trash/<time>/, nothing is erased. */
   deleteDoc(name) {
     if (!this.docExists(name)) throw pageError("unknown_page", `no doc "${name}"`);

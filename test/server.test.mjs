@@ -235,7 +235,7 @@ test("a tab on page code from before an upgrade can't take a layout patch: canva
 
 test("the page's modules and shared lib modules are served (fixed shapes, an allowlist); lib modules import only each other", async () => {
   const { port } = await start();
-  const served = ["layout", "geometry", "merge", "names", "machine", "page-machines", "fonts", "docs"];
+  const served = ["layout", "geometry", "merge", "names", "machine", "page-machines", "fonts", "docs", "docmerge", "docsync"];
   for (const m of served) {
     const r = await raw(port, { path: `/lib/${m}.mjs` });
     assert.equal(r.status, 200, m);
@@ -546,4 +546,40 @@ test("docs: rename and move a doc (links that name it are listed), delete one to
   assert.ok(!fs.existsSync(path.join(dir, "notes")), "the emptied folder is pruned");
   const trashed = fs.readdirSync(path.join(dir, ".obeya", ".trash"), { recursive: true }).map(String);
   assert.ok(trashed.some((f) => f.endsWith(path.join("notes", "b.md"))), trashed.join(", "));
+});
+
+test("docs: the tab saves a doc only over the text it started from; 409 doc_changed carries the file's text", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR, file = path.join(dir, "notes.md");
+  fs.writeFileSync(file, "# Notes\n\nfirst\n");
+  const save = (body) => raw(port, { method: "POST", path: `/api/docs/${encodeURIComponent("notes.md")}`, headers: H(), body });
+  let r = await save({ base: "# Notes\n\nfirst\n", text: "# Notes\n\nfirst\nsecond\n" });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(fs.readFileSync(file, "utf8"), "# Notes\n\nfirst\nsecond\n");
+  fs.writeFileSync(file, "# Notes\r\n\r\nthe agent's\r\n"); // the agent wrote it meanwhile (CRLF kept as is)
+  r = await save({ base: "# Notes\n\nfirst\nsecond\n", text: "mine" });
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error.code, "doc_changed");
+  assert.equal(r.json.error.text, "# Notes\r\n\r\nthe agent's\r\n");
+  assert.equal(fs.readFileSync(file, "utf8"), "# Notes\r\n\r\nthe agent's\r\n", "nothing written");
+  assert.equal((await save({ base: "x" })).json.error.code, "invalid_json");
+  for (const bad of ["../out.md", "nope.md", ".obeya/x.md"]) {
+    r = await raw(port, { method: "POST", path: `/api/docs/${encodeURIComponent(bad)}`, headers: H(), body: { base: "", text: "x" } });
+    assert.ok([400, 404].includes(r.status), `${bad}: ${r.status}`);
+  }
+  assert.ok(!fs.existsSync(path.join(dir, "..", "out.md")));
+});
+
+test("docs: New page with a .md name makes a doc titled by its name; a second time is page_exists", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR;
+  const make = (n) => raw(port, { method: "POST", path: `/api/pages/${encodeURIComponent(n)}`, headers: H(), body: {} });
+  let r = await make("v0.3/release-notes.md");
+  assert.equal(r.status, 201, r.text);
+  assert.equal(fs.readFileSync(path.join(dir, "v0.3", "release-notes.md"), "utf8"), "# release-notes\n\n");
+  assert.ok((await raw(port, { path: "/api/pages" })).json.docs.some((d) => d.name === "v0.3/release-notes.md"));
+  r = await make("v0.3/release-notes.md");
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error.code, "page_exists");
+  assert.equal((await make("bad:name.md")).status, 400);
 });

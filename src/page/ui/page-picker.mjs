@@ -101,7 +101,7 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
       ...(b.create ? { onClick: () => go(b.name, true) } : { href: href(b.name), title: b.name, onClick: follow(b.name) }),
     },
       b.create
-        ? h("span", null, "+ New page ", h("b", null, baseName(b.name)))
+        ? h("span", null, b.name.endsWith(".md") ? "+ New doc " : "+ New page ", h("b", null, baseName(b.name)))
         : h("span", { className: "xl-named" }, kindIcon(p?.doc), h("span", { className: "xl-base" }, baseName(b.name)), b.name === current ? h("span", { className: "here" }, "open now") : null,
           waiting.has(b.name) ? h("span", { className: "xl-waiting", "data-testid": "picker-waiting", title: "Your agent is waiting for you on this page" }, "● waiting for you") : null,
           b.showFolder && folderOf(b.name) ? h("span", { className: "xl-in" }, folderOf(b.name).split("/").join(" / ")) : null),

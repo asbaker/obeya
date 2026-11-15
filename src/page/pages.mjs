@@ -23,14 +23,14 @@ export function rememberPage(name) {
 export const makePage = (name) => postJSON(`/api/pages/${encodeURIComponent(name)}`, {});
 export async function createPage(name) {
   await makePage(name);
-  await openPage(name);
+  await openPage(name, null, { edit: isDocName(name) }); // a new doc opens in Edit
 }
 /**
  * Open a page. Each switch is a browser history entry, so Back and Forward
  * move between pages; `history: "replace"` for the first page, a page that
  * replaces a deleted one, and Back/Forward themselves.
  */
-export async function openPage(name, frameId, { history: how = "push", heading } = {}) {
+export async function openPage(name, frameId, { history: how = "push", heading, edit = false } = {}) {
   name = normalizePageName(name); // from a URL or a link: the NFC form the server uses
   if (isDocName(name)) {
     // A doc covers the canvas; a drawing stays loaded underneath (the first one
@@ -39,7 +39,7 @@ export async function openPage(name, frameId, { history: how = "push", heading }
       const { pages } = await getJSON("/api/pages");
       if (pages[0]) await editorJob((hold) => loadPage(pages[0].name, hold, "replace"));
     }
-    await showDoc(name, heading, { history: S.currentPage === null || how === "replace" ? "replace" : how });
+    await showDoc(name, heading, { history: S.currentPage === null || how === "replace" ? "replace" : how, edit });
     if (!RENDERER) rememberPage(name);
     return;
   }

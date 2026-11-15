@@ -181,18 +181,80 @@ body.doc-open .layer-ui__wrapper__footer, body.doc-open .App-menu_bottom, body.d
 #doc .doc-top { position: sticky; top: 0; height: 72px; margin-bottom: -72px; z-index: 1;
   background: linear-gradient(#fff 78%, rgba(255,255,255,0)); pointer-events: none; }
 #doc .doc-body { max-width: 860px; margin: 0 auto; padding: 88px 24px 96px; }
-#doc .doc-body h1, #doc .doc-body h2 { border-bottom: 1px solid #e2e5eb; padding-bottom: .3em; }
-#doc .doc-body h1, #doc .doc-body h2, #doc .doc-body h3 { line-height: 1.25; margin: 1.6em 0 .6em; scroll-margin-top: 64px; }
-#doc .doc-body h4, #doc .doc-body h5, #doc .doc-body h6 { scroll-margin-top: 64px; }
-#doc .doc-body a { color: #4f46e5; }
-#doc .doc-body code { font: 85% ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: .15em .35em; border-radius: 4px; }
-#doc .doc-body pre { background: #f6f7f9; padding: 14px 16px; border-radius: 8px; overflow: auto; }
-#doc .doc-body pre code { background: none; padding: 0; }
-#doc .doc-body table { border-collapse: collapse; display: block; overflow: auto; margin: 1em 0; }
-#doc .doc-body th, #doc .doc-body td { border: 1px solid #e2e5eb; padding: 6px 12px; vertical-align: top; }
-#doc .doc-body th { background: #f6f7f9; }
-#doc .doc-body blockquote { margin: 1em 0; padding: 0 1em; color: #5b6475; border-left: 4px solid #e2e5eb; }
-#doc .doc-body img { max-width: 100%; }
+#doc .markdown h1, #doc .markdown h2 { border-bottom: 1px solid #e2e5eb; padding-bottom: .3em; }
+#doc .markdown h1, #doc .markdown h2, #doc .markdown h3 { line-height: 1.25; margin: 1.6em 0 .6em; scroll-margin-top: 64px; }
+#doc .markdown h4, #doc .markdown h5, #doc .markdown h6 { scroll-margin-top: 64px; }
+#doc .markdown a { color: #4f46e5; }
+#doc .markdown code { font: 85% ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: .15em .35em; border-radius: 4px; }
+#doc .markdown pre { background: #f6f7f9; padding: 14px 16px; border-radius: 8px; overflow: auto; }
+#doc .markdown pre code { background: none; padding: 0; }
+#doc .markdown table { border-collapse: collapse; display: block; overflow: auto; margin: 1em 0; }
+#doc .markdown th, #doc .markdown td { border: 1px solid #e2e5eb; padding: 6px 12px; vertical-align: top; }
+#doc .markdown th { background: #f6f7f9; }
+#doc .markdown blockquote { margin: 1em 0; padding: 0 1em; color: #5b6475; border-left: 4px solid #e2e5eb; }
+#doc .markdown img { max-width: 100%; }
+/* What changed on disk (Read, the side-by-side preview): tinted, then fading. */
+#doc .markdown .doc-changed { --doc-tint: #ebfbee; border-radius: 4px; animation: doc-fade-block 4s ease-out forwards; }
+#doc .markdown tr.doc-changed { animation: none; }
+#doc .markdown tr.doc-changed > td { animation: doc-fade-block 4s ease-out forwards; }
+@keyframes doc-fade-block {
+  0%, 35% { background-color: var(--doc-tint); box-shadow: 0 0 0 6px var(--doc-tint); }
+  100% { background-color: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Read / Edit, top right, where Present sits on a drawing. */
+#doc .doc-mode { position: fixed; top: 16px; right: 16px; z-index: 2; height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid #e0e0e0;
+  background: #fff; color: #1e1e1e; font: 500 14px system-ui, sans-serif; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+#doc .doc-mode:hover { background: #f1f0ff; }
+#doc .doc-problem { position: fixed; top: 60px; right: 16px; z-index: 2; max-width: 360px; padding: 10px 14px; border-radius: 8px; background: #1e1e1e; color: #fff; font: 13px/1.45 system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+body.doc-editing #doc .doc-mode { border-color: #6965db; background: #f1f0ff; color: #6965db; }
+/* Edit: EasyMDE in the doc's column; the column widens while side by side. */
+#doc .doc-edit { display: none; max-width: 860px; margin: 0 auto; padding: 72px 24px 48px; }
+body.doc-editing #doc .doc-body { display: none; }
+body.doc-editing #doc .doc-edit { display: block; }
+/* Side by side (ours): a grid the height of the window under the pill's strip:
+   the toolbar, the editor and the preview, the status bar. The page itself
+   doesn't scroll; each pane scrolls on its own and they follow each other. */
+#doc .doc-edit.doc-split { max-width: none; padding: 72px 40px 0; }
+#doc .doc-split .EasyMDEContainer { height: calc(100vh - 72px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+#doc .doc-split .EasyMDEContainer > .editor-toolbar { grid-column: 1 / -1; grid-row: 1; }
+#doc .doc-split .EasyMDEContainer > .doc-clash-banner { grid-column: 1 / -1; grid-row: 2; }
+#doc .doc-split .EasyMDEContainer > .editor-statusbar { grid-column: 1 / -1; grid-row: 4; }
+#doc .doc-split .EasyMDEContainer > .CodeMirror { grid-column: 1; grid-row: 3; height: auto; min-height: 0; border-radius: 0 0 0 8px; }
+#doc .doc-split .CodeMirror-scroll { min-height: 0 !important; }
+#doc .doc-split .doc-preview { grid-column: 2; grid-row: 3; min-height: 0; overflow: auto; padding: 8px 24px; border: 1px solid #e2e5eb; border-left: 0; border-radius: 0 0 8px 0; background: #fff;
+  color: #1d2330; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+#doc .EasyMDEContainer .editor-toolbar { position: sticky; top: 64px; z-index: 1; background: #fff; border-color: #e2e5eb; border-radius: 8px 8px 0 0; opacity: 1; box-shadow: 0 -24px 0 #fff; }
+#doc .EasyMDEContainer .editor-toolbar button.doc-tb { font: 15px system-ui, sans-serif; color: #495057; width: 34px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+#doc .EasyMDEContainer .editor-toolbar .doc-serif { font: 18px Georgia, "Times New Roman", serif; }
+#doc .EasyMDEContainer .editor-toolbar .doc-quote { font-size: 26px; line-height: 1; position: relative; top: 5px; }
+#doc .EasyMDEContainer .editor-toolbar button.doc-tb.active, #doc .EasyMDEContainer .editor-toolbar button.doc-tb:hover { background: #f1f0ff; border-color: #6965db; color: #6965db; }
+#doc .EasyMDEContainer .CodeMirror { border-color: #e2e5eb; border-radius: 0 0 8px 8px; color: #343a40; font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#doc .EasyMDEContainer .CodeMirror .cm-formatting { color: #7a828a; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-1 { font-size: 1.35em; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-2 { font-size: 1.2em; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-3, #doc .EasyMDEContainer .CodeMirror .cm-header-4 { font-size: 1.1em; }
+/* The status bar stays in view at the bottom while the doc scrolls, as it does side by side. */
+#doc .EasyMDEContainer .editor-statusbar { position: sticky; bottom: 0; z-index: 1; background: #fff; color: #868e96; font: 13px system-ui, sans-serif; }
+#doc .editor-statusbar .doc-save-saved { color: #2f9e44; }
+#doc .editor-statusbar .doc-save-clash, #doc .editor-statusbar .doc-save-error { color: #e8590c; }
+/* Tints that hold a moment, then fade out: the line Edit landed on, lines merged in. */
+#doc .CodeMirror .doc-landed { --doc-tint: #f1f0ff; --doc-edge: transparent; animation: doc-fade 1.6s ease-out forwards; }
+#doc .CodeMirror .doc-merged { --doc-tint: #ebfbee; --doc-edge: #2f9e44; animation: doc-fade 4s ease-out forwards; }
+@keyframes doc-fade {
+  0%, 35% { background-color: var(--doc-tint); box-shadow: inset 3px 0 var(--doc-edge); }
+  100% { background-color: transparent; box-shadow: inset 3px 0 transparent; }
+}
+#doc .CodeMirror .doc-clash { background: #fff4e6; }
+/* A clash: a banner inside the editor, under the toolbar; typing goes on. */
+#doc .doc-clash-banner { position: sticky; top: 114px; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 10px 12px 10px 16px;
+  border: 1px solid #ffd8a8; border-radius: 8px; background: #fff4e6; font: 13px system-ui, sans-serif; color: #495057; }
+#doc .doc-clash-banner div { flex: 1; display: flex; flex-direction: column; }
+#doc .doc-clash-banner b { font-size: 15px; color: #1d2330; }
+#doc .doc-clash-banner button { border: 1px solid #ced4da; background: #fff; border-radius: 6px; padding: 6px 14px; font: inherit; cursor: pointer; }
+#doc .doc-clash-banner button.primary { background: #6965db; border-color: #6965db; color: #fff; }
+#doc .doc-clash-banner.doc-nudge { animation: doc-nudge .3s; }
+@keyframes doc-nudge { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
 /* A sideways two-finger pan on a trackpad pans the canvas, never Back/Forward. */
 html, body { overscroll-behavior-x: none; }
@@ -200,10 +262,32 @@ html, body { overscroll-behavior-x: none; }
 /* A doc in the dark theme: it follows the theme picked on the drawings. */
 body:has(.excalidraw.theme--dark) #doc { background: #121212; color: #e3e3e8; }
 body:has(.excalidraw.theme--dark) #doc .doc-top { background: linear-gradient(#121212 78%, rgba(18,18,18,0)); }
-body:has(.excalidraw.theme--dark) #doc .doc-body a { color: #a5b4fc; }
-body:has(.excalidraw.theme--dark) #doc .doc-body h1, body:has(.excalidraw.theme--dark) #doc .doc-body h2 { border-bottom-color: #2e2e33; }
-body:has(.excalidraw.theme--dark) #doc .doc-body code { background: #26262b; }
-body:has(.excalidraw.theme--dark) #doc .doc-body pre { background: #1c1c20; }
-body:has(.excalidraw.theme--dark) #doc .doc-body th, body:has(.excalidraw.theme--dark) #doc .doc-body td { border-color: #2e2e33; }
-body:has(.excalidraw.theme--dark) #doc .doc-body th { background: #1c1c20; }
-body:has(.excalidraw.theme--dark) #doc .doc-body blockquote { color: #a1a1aa; border-left-color: #3a3a40; }
+body:has(.excalidraw.theme--dark) #doc .markdown a { color: #a5b4fc; }
+body:has(.excalidraw.theme--dark) #doc .markdown h1, body:has(.excalidraw.theme--dark) #doc .markdown h2 { border-bottom-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .markdown code { background: #26262b; }
+body:has(.excalidraw.theme--dark) #doc .markdown pre { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .markdown th, body:has(.excalidraw.theme--dark) #doc .markdown td { border-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .markdown th { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .markdown blockquote { color: #a1a1aa; border-left-color: #3a3a40; }
+body:has(.excalidraw.theme--dark) #doc .doc-mode, body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror, body:has(.excalidraw.theme--dark) #doc .doc-preview { background: #1c1c20; color: #e3e3e8; border-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-statusbar { background: #121212; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar { box-shadow: 0 -24px 0 #121212; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-cursor { border-left-color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb { color: #c1c2c5; }
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-merged { --doc-tint: #1f3326; }
+body:has(.excalidraw.theme--dark) #doc .markdown .doc-changed { --doc-tint: #1f3326; }
+/* EasyMDE's own colours are for a light page: the selection, inline code, the landing tint. */
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-landed { --doc-tint: #2b2a4a; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-selected,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected { background: #3d3b72; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line::selection,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line > span::selection,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line > span > span::selection { background: #3d3b72; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .cm-comment { background: rgba(255, 255, 255, .08); }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .cm-formatting { color: #8b929a; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb.active,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb:hover { background: #2b2a4a; border-color: #6965db; color: #b9b5ff; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar i.separator { border-left-color: #3a3a40; border-right-color: transparent; }
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-clash, body:has(.excalidraw.theme--dark) #doc .doc-clash-banner { background: #3a2a18; border-color: #5c3d1a; color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .doc-clash-banner b { color: #fff; }

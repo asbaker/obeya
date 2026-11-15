@@ -21,7 +21,7 @@ export function notice(html) {
 export async function request(u, init = {}) {
   const r = await fetch(u, init);
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(body.error?.message || `HTTP ${r.status}`), { code: body.error?.code });
+  if (!r.ok) throw Object.assign(new Error(body.error?.message || `HTTP ${r.status}`), { code: body.error?.code, body });
   return body;
 }
 export const getJSON = (u) => request(u);

@@ -1872,3 +1872,374 @@ test("a server killed before it saves: an open tab sends back what it had newer,
   }, { what: "the server caught up from the tab", timeout: 20000 });
   await A.close();
 });
+
+test("docs: Edit with EasyMDE where you were reading; autosave; side by side; the agent's lines merge in; a clash asks; New doc", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  const file = path.join(dir, "notes", "edit.md");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const filler = (w) => Array.from({ length: 40 }, (_, i) => `${w} line ${i}.\n\n`).join("");
+  // Uneven, as real docs are: headings render taller than their source, long
+  // paragraphs wrap more in the source than in the preview, code renders
+  // shorter. A sync by proportion, or by guessed line heights, drifts on it.
+  const parts = Array.from({ length: 20 }, (_, i) => `## Part ${i}\n\n`).join("");
+  const long = Array.from({ length: 20 }, (_, i) => `Paragraph ${i}: ${"a long sentence that wraps across several lines in the source pane ".repeat(5)}\n\n`).join("");
+  const code = "```\n" + Array.from({ length: 80 }, (_, i) => `code ${i}`).join("\n") + "\n```\n\n";
+  fs.writeFileSync(file, `# Edit me\n\n${parts}${long}${filler("Top")}## Middle\n\nUnder the middle.\n\n${filler("Low")}${code}Last line.\n`);
+  const read = () => fs.readFileSync(file, "utf8");
+  const opened = await cli(["open", "editboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/editboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); // a drawing under the doc
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/edit.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc shown", timeout: 60000 });
+  assert.equal(await A.textContent("[data-testid=doc-mode]"), "Edit");
+  assert.equal(await A.evaluate(() => document.querySelector("#doc .EasyMDEContainer")), null, "no editor until Edit");
+  const cm = (fn, ...args) => A.evaluate(([f, a]) => { const c = document.querySelector("#doc .CodeMirror").CodeMirror; return new Function("cm", "a", f)(c, a); }, [fn, args]);
+  // Read with "## Middle" at the top, then Edit: the caret lands on its line.
+  await A.evaluate(() => { const h = document.getElementById("middle"); document.getElementById("doc").scrollTop += h.getBoundingClientRect().top - 90; });
+  await A.click("[data-testid=doc-mode]");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+  assert.equal(await A.textContent("[data-testid=doc-mode]"), "Read");
+  const middle = read().split("\n").indexOf("## Middle");
+  assert.equal(await cm("return cm.getCursor().line"), middle, "the caret on the line you were reading");
+  assert.equal(await cm("return cm.getMode().name"), "gfm", "EasyMDE's markdown mode, one CodeMirror");
+  // Typing saves itself after a pause.
+  await A.keyboard.press("End");
+  await A.keyboard.type(" (typed)");
+  await until(() => read().includes("## Middle (typed)\n"), { what: "autosaved to disk" });
+  await until(async () => (await A.textContent("[data-testid=doc-save]")) === "saved ✓", { what: "saved ✓" });
+  // Side by side is on from the start (a wide window): our renderer, inside the doc.
+  await until(() => A.evaluate(() => [...document.querySelectorAll("#doc [data-testid=doc-preview] h2")].some((h) => h.textContent === "Middle (typed)")), { what: "the side-by-side preview" });
+  // How the split scrolls and is laid out: the "side by side keeps both panes" test.
+  await A.click("#doc .doc-tb-side-by-side");
+  await cm("cm.focus()");
+  // Not split: the footer is pinned at the bottom of the window too, wherever the doc is scrolled.
+  for (const top of [0, 1500]) {
+    await A.evaluate((t) => { document.getElementById("doc").scrollTop = t; }, top);
+    await sleep(100);
+    const gap = await A.evaluate(() => Math.round(innerHeight - document.querySelector("#doc .editor-statusbar").getBoundingClientRect().bottom));
+    assert.ok(Math.abs(gap) <= 1, `the footer at the bottom while editing (scrolled to ${top}: gap ${gap})`);
+  }
+  await cm("cm.setCursor({ line: a[0], ch: 0 }); cm.scrollIntoView(null, 200)", middle);
+  await A.keyboard.press("End");
+  // The agent writes another line while you type: both kept, yours not lost.
+  await A.keyboard.type(" and more");
+  fs.writeFileSync(file, read().replace("Last line.\n", "Last line, by the agent.\n"));
+  await until(async () => {
+    const v = await cm("return cm.getValue()");
+    return v.includes("## Middle (typed) and more\n") && v.includes("Last line, by the agent.\n");
+  }, { what: "their line merged into the editor" });
+  assert.equal(await cm("return cm.getCursor().line"), middle, "the caret stays");
+  // The merged line is tinted, and the tint fades out rather than switching off.
+  const fade = await A.evaluate(() => { const el = document.querySelector("#doc .CodeMirror .doc-merged"); return el && getComputedStyle(el).animationName; });
+  assert.equal(fade, "doc-fade", "the merged tint fades");
+  await until(() => read().includes("## Middle (typed) and more\n") && read().includes("Last line, by the agent.\n"), { what: "the merge saved" });
+  // Both change the same line: a banner; nothing saved until you choose.
+  const clash = async (mine, theirs) => {
+    await cm("cm.focus(); cm.setCursor({ line: a[0], ch: 0 })", middle + 2);
+    await A.keyboard.press("End");
+    await A.keyboard.type(mine);
+    fs.writeFileSync(file, read().replace("Under the middle.", `Under the middle.${theirs}`));
+    await until(() => A.evaluate(() => document.querySelector("[data-testid=doc-clash]")), { what: "the clash banner" });
+    assert.match(await A.textContent("[data-testid=doc-save]"), /not saved/);
+    assert.ok(read().includes(theirs) && !read().includes(mine), "theirs on disk until you choose");
+    assert.equal(await A.evaluate(() => { const e = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; }), true, "closing the tab asks");
+  };
+  await clash(" Mine.", " Theirs.");
+  await A.click("[data-testid=doc-mine]");
+  await until(() => read().includes("Under the middle. Mine.\n"), { what: "Keep mine saved mine" });
+  assert.equal(await A.evaluate(() => document.querySelector("[data-testid=doc-clash]")), null);
+  await clash(" Again mine.", " Again theirs.");
+  await A.click("[data-testid=doc-theirs]");
+  await until(async () => (await cm("return cm.getValue()")).includes("Under the middle. Again theirs. Mine.\n"), { what: "Load theirs put theirs in" });
+  await until(() => !read().includes("Again mine"), { what: "theirs kept on disk" });
+  // The bulleted-list button writes "- ", as the docs are written.
+  const low = read().split("\n").indexOf("Low line 3.");
+  await cm("cm.focus(); cm.setCursor({ line: a[0], ch: 0 })", low);
+  await A.click("#doc .doc-tb-unordered-list");
+  assert.equal(await cm("return cm.getLine(a[0])", low), "- Low line 3.");
+  await cm("cm.undo()");
+  // Read (Cmd/Ctrl+E): the rendered doc, with the edits.
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing") && document.querySelector("#doc .doc-body").textContent.includes("Middle (typed) and more")), { what: "Read again" });
+  // A narrow window: Edit opens plain, one pane.
+  await A.setViewportSize({ width: 850, height: 800 });
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "Edit, narrow" });
+  await sleep(300);
+  assert.equal(await A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview]")), null, "narrow: no side by side");
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing")), { what: "Read again" });
+  await A.setViewportSize({ width: 1200, height: 800 });
+  // New doc: the New page dialog's Kind, then the picker's "+ New doc".
+  await A.click("[data-testid=page-pill]");
+  await A.click("[data-testid=picker-new]");
+  await A.click("[data-testid=new-page-kind-doc]");
+  await A.fill("[data-testid=new-page-name]", "fresh");
+  await A.click("[data-testid=new-page-create]");
+  await until(() => fs.existsSync(path.join(dir, "notes", "fresh.md")), { what: "the new doc on disk" });
+  assert.equal(fs.readFileSync(path.join(dir, "notes", "fresh.md"), "utf8"), "# fresh\n\n");
+  await until(() => A.evaluate(() => new URLSearchParams(location.search).get("page") === "notes/fresh.md" && document.body.classList.contains("doc-editing")), { what: "the new doc open in Edit", timeout: 30000 });
+  await A.click("[data-testid=page-pill]");
+  await A.fill("[data-testid=picker-search]", "quick.md");
+  await until(() => A.evaluate(() => document.querySelector("[data-testid=picker-create]")?.textContent.startsWith("+ New doc")), { what: "+ New doc in the picker" });
+  await A.keyboard.press("Enter");
+  await until(() => fs.existsSync(path.join(dir, "notes", "quick.md")), { what: "the picker's new doc on disk" });
+  await A.close();
+});
+
+// A doc shaped like a real spec: a wide table, lists, long paragraphs, code.
+function splitDoc() {
+  const long = (s) => `${s} ${"Every requirement says what it gives the person and how we know it's done, in words a reader can check. ".repeat(3)}`;
+  // Table rows and bullets as long as a real spec's: one source line wraps
+  // to several in the editor, so its line heights can't be guessed.
+  const rows = Array.from({ length: 14 }, (_, i) => `| ${String(i + 1).padStart(2, "0")} | Decision ${i + 1} about the editor | ${i % 3 ? "A short answer" : "A longer answer that wraps onto a second line in the rendered table, as real answers do; " + "with its reasons spelled out at length, as they are in a spec someone will build from. ".repeat(3)} |`).join("\n");
+  const sections = Array.from({ length: 8 }, (_, i) => [
+    `### R${i + 1} Requirement number ${i + 1}`, "",
+    long(`Gives: requirement ${i + 1}.`), "",
+    ...(i % 2 ? ["- " + long("A long bullet.") + long(""), "- A short bullet.", "- " + long("Another long one.") + long(""), "- " + long("One more.")] : ["```", ...Array.from({ length: 12 }, (_, k) => `code line ${k} of section ${i + 1}`), "```"]), "",
+  ].join("\n")).join("\n");
+  return `# Sync check\n\n${long("Intro.")}\n\n## Decisions\n\n| # | Decision | Answer |\n|---|---|---|\n${rows}\n\n## Requirements\n\n${sections}\n## Notes\n\n${Array.from({ length: 12 }, (_, i) => long(`Note ${i}.`)).join("\n\n")}\n`;
+}
+
+test("docs: side by side keeps both panes on the same line, whichever you scroll, at any window size, after a reload", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes", "split.md"), splitDoc());
+  const opened = await cli(["open", "splitboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/splitboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/split.md");
+  // Where each pane's top is, as a fractional source line, measured here (not
+  // by the code under test): the editor from CodeMirror's line geometry, the
+  // preview from its blocks' data-line, interpolated by line.
+  const MEASURE = `(() => {
+    const cm = document.querySelector("#doc .CodeMirror").CodeMirror;
+    const pv = document.querySelector("#doc [data-testid=doc-preview]");
+    const info = cm.getScrollInfo();
+    const l = cm.lineAtHeight(info.top, "local"), y0 = cm.heightAtLine(l, "local"), y1 = l + 1 < cm.lineCount() ? cm.heightAtLine(l + 1, "local") : info.height;
+    const editorLine = l + (y1 > y0 ? Math.min(1, Math.max(0, (info.top - y0) / (y1 - y0))) : 0);
+    const pt = pv.getBoundingClientRect().top - pv.scrollTop;
+    const bs = [...pv.querySelectorAll(":scope > [data-line]")].map((b) => ({ line: +b.dataset.line, y: b.getBoundingClientRect().top - pt }));
+    bs.push({ line: cm.lineCount(), y: pv.scrollHeight });
+    let i = 0;
+    while (i < bs.length - 2 && bs[i + 1].y <= pv.scrollTop) i++;
+    const a = bs[i], b = bs[i + 1];
+    const previewLine = a.line + (b.y > a.y ? Math.min(1, Math.max(0, (pv.scrollTop - a.y) / (b.y - a.y))) : 0) * (b.line - a.line);
+    return { editorLine, previewLine, editorEnd: info.top + info.clientHeight >= info.height - 2, previewEnd: pv.scrollTop + pv.clientHeight >= pv.scrollHeight - 2, editorTop: info.top, previewTop: pv.scrollTop };
+  })()`;
+  for (const [w, h] of [[1000, 576], [1400, 850]]) {
+    const A = await S.context.newPage();
+    await A.setViewportSize({ width: w, height: h });
+    await A.goto(u.href);
+    await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+    await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h2")), { what: "the preview, on from the start" });
+    await sleep(300);
+    const at = `${w}×${h}`;
+    // The layout: two panes the height of the window, the footer flush at the
+    // bottom, the page itself not scrolling, nothing over Read.
+    const layout = await A.evaluate(() => {
+      const pv = document.querySelector("#doc [data-testid=doc-preview]").getBoundingClientRect();
+      const ed = document.querySelector("#doc .CodeMirror").getBoundingClientRect();
+      const bar = document.querySelector("#doc .editor-statusbar").getBoundingClientRect();
+      const btn = document.querySelector("[data-testid=doc-mode]").getBoundingClientRect();
+      const doc = document.getElementById("doc");
+      return { pvTop: pv.top, edTop: ed.top, pvBottom: pv.bottom, edBottom: ed.bottom, pvLeft: pv.left, edRight: ed.right, barGap: innerHeight - bar.bottom, barHeight: bar.height,
+        pageScrolls: doc.scrollHeight > doc.clientHeight + 1, readOnTop: document.elementFromPoint(btn.x + btn.width / 2, btn.y + btn.height / 2)?.dataset.testid === "doc-mode" };
+    });
+    assert.ok(Math.abs(layout.pvTop - layout.edTop) <= 2 && Math.abs(layout.pvBottom - layout.edBottom) <= 2, `${at}: the panes side by side, same top and bottom ${JSON.stringify(layout)}`);
+    assert.ok(layout.edRight <= layout.pvLeft + 2, `${at}: the editor left of the preview`);
+    assert.ok(Math.abs(layout.barGap) <= 1 && layout.barHeight < 40, `${at}: the footer one line, flush at the bottom ${JSON.stringify(layout)}`);
+    assert.ok(!layout.pageScrolls, `${at}: the page under the split doesn't scroll`);
+    assert.ok(layout.readOnTop, `${at}: nothing covers Read`);
+    // Each heading put at the top of one pane is at the top of the other.
+    const heads = await A.evaluate(() => {
+      const pv = document.querySelector("#doc [data-testid=doc-preview]");
+      const pt = pv.getBoundingClientRect().top - pv.scrollTop;
+      return [...pv.querySelectorAll(":scope > h2[data-line], :scope > h3[data-line]")]
+        .map((x) => ({ line: +x.dataset.line, text: x.textContent, y: x.getBoundingClientRect().top - pt }))
+        .filter((x) => x.y <= pv.scrollHeight - pv.clientHeight - 4);
+    });
+    assert.ok(heads.length >= 6, `${at}: headings to check: ${heads.length}`);
+    for (const hd of heads) {
+      await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.scrollTo(null, cm.heightAtLine(l, "local")); }, hd.line);
+      await sleep(250);
+      const off = await A.evaluate((l) => {
+        const pv = document.querySelector("#doc [data-testid=doc-preview]");
+        return pv.querySelector(`:scope > [data-line="${l}"]`).getBoundingClientRect().top - pv.getBoundingClientRect().top;
+      }, hd.line);
+      assert.ok(Math.abs(off) <= 16, `${at}: "${hd.text}" at the editor's top is ${Math.round(off)} px from the preview's top`);
+    }
+    for (const hd of heads) {
+      await A.evaluate((y) => { document.querySelector("#doc [data-testid=doc-preview]").scrollTop = y; }, hd.y);
+      await sleep(250);
+      const off = await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; return cm.heightAtLine(l, "local") - cm.getScrollInfo().top; }, hd.line);
+      assert.ok(Math.abs(off) <= 16, `${at}: "${hd.text}" at the preview's top is ${Math.round(off)} px from the editor's top`);
+    }
+    // Real wheel scrolling, trackpad-like, in either pane: the tops stay within a line.
+    const pane = async (sel) => { const r = await A.locator(sel).first().boundingBox(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+    await A.evaluate(() => document.querySelector("#doc .CodeMirror").CodeMirror.scrollTo(null, 0));
+    await sleep(250);
+    for (const [sel, dy, steps] of [["#doc .CodeMirror", 20, 30], ["#doc .CodeMirror", 60, 20], ["#doc [data-testid=doc-preview]", 20, 30], ["#doc [data-testid=doc-preview]", -50, 15], ["#doc .CodeMirror", -30, 10], ["#doc [data-testid=doc-preview]", 80, 15]]) {
+      const before = await A.evaluate(MEASURE);
+      await A.mouse.move(...(await pane(sel)));
+      for (let k = 0; k < steps; k++) { await A.mouse.wheel(0, dy); await sleep(16); }
+      await sleep(400);
+      const m = await A.evaluate(MEASURE);
+      const what = `${at}: wheel ${dy > 0 ? "down" : "up"} in the ${sel.includes("CodeMirror") ? "editor" : "preview"}`;
+      assert.ok(Math.abs(m.editorTop - before.editorTop) > 50 || Math.abs(m.previewTop - before.previewTop) > 50, `${what}: something scrolled ${JSON.stringify(m)}`);
+      if (!m.editorEnd && !m.previewEnd) assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${what}: the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    }
+    // Momentum: a pane scrolled smoothly, frame by frame, is never pushed back
+    // by the pane following it (the follower's own scroll isn't taken for yours).
+    for (const who of ["editor", "preview"]) {
+      const r = await A.evaluate((w) => new Promise((done) => {
+        const cm = document.querySelector("#doc .CodeMirror").CodeMirror, pv = document.querySelector("#doc [data-testid=doc-preview]");
+        const get = () => (w === "editor" ? cm.getScrollInfo().top : pv.scrollTop);
+        const set = (y) => (w === "editor" ? cm.scrollTo(null, y) : (pv.scrollTop = y));
+        set(0);
+        let k = 0, last = null, pushed = [];
+        const step = () => {
+          const now = get();
+          if (last !== null && Math.abs(now - last) > 1) pushed.push([k, Math.round(last), Math.round(now)]);
+          if (k++ >= 90) return done({ pushed, top: now });
+          set(now + 14);
+          last = get();
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(step));
+      }), who);
+      assert.deepEqual(r.pushed, [], `${at}: scrolling the ${who} smoothly, the other pane pushed it back (frame, set, found): ${JSON.stringify(r.pushed.slice(0, 5))}`);
+      assert.ok(r.top > 900, `${at}: the ${who} scrolled (${r.top})`);
+      await sleep(300);
+      const m = await A.evaluate(MEASURE);
+      if (!m.editorEnd && !m.previewEnd) assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${at}: after smooth scrolling the ${who}, the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    }
+    // Typing in the split keeps them together.
+    const first = heads[2];
+    await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setCursor({ line: l + 2, ch: 0 }); cm.scrollTo(null, cm.heightAtLine(l, "local")); }, first.line);
+    await A.keyboard.type("Typed while split. ");
+    await sleep(800);
+    const m = await A.evaluate(MEASURE);
+    assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${at}: after typing, the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    // Lines arriving above what you're looking at (the agent's, merged in): the preview follows.
+    await A.evaluate((l) => {
+      const cm = document.querySelector("#doc .CodeMirror").CodeMirror;
+      cm.scrollTo(null, cm.heightAtLine(l, "local"));
+      cm.replaceRange(Array.from({ length: 12 }, (_, i) => `Merged paragraph ${i} from the agent, long enough to take a line or two in either pane.\n\n`).join(""), { line: 2, ch: 0 });
+    }, heads[4].line);
+    await sleep(800);
+    const n = await A.evaluate(MEASURE);
+    assert.ok(Math.abs(n.editorLine - n.previewLine) <= 1, `${at}: after lines arrive above, the editor's top is line ${n.editorLine.toFixed(1)}, the preview's ${n.previewLine.toFixed(1)}`);
+    await A.close();
+  }
+});
+
+test("docs: Edit is readable in both themes: selected text, the landing tint, inline code, the active toolbar button (contrast at least 3:1), hairline separators", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes", "dark.md"), "# Dark\n\nGives: a doc opens exactly as today, plus `one` Edit button.\n\n- A **bold** bullet.\n");
+  const opened = await cli(["open", "darkboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/darkboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/dark.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+  const contrastOf = (sel, bgSel) => A.evaluate(([s, b]) => {
+    const rgb = (c) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    const lum = ([r, g, bl]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bl); };
+    // The background behind an element: its own, else the nearest painted one under it.
+    const paint = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; const v = rgb(c); if (v.length >= 3 && (v[3] ?? 1) > 0.5) return v; } return [255, 255, 255]; };
+    const fg = rgb(getComputedStyle(document.querySelector(s)).color);
+    const bg = b ? (() => { const el = document.querySelector(b); const v = rgb(getComputedStyle(el).backgroundColor); return (v[3] ?? 1) > 0.5 ? v : paint(el.parentElement); })() : paint(document.querySelector(s));
+    const [x, y] = [lum(fg), lum(bg)].sort((m, n) => n - m);
+    return { ratio: (x + 0.05) / (y + 0.05), fg, bg };
+  }, [sel, bgSel]);
+  for (const theme of ["light", "dark"]) {
+    if (theme === "dark") {
+      await A.click(".main-menu-trigger");
+      await A.getByText("Dark mode").click();
+      await until(() => A.evaluate(() => getComputedStyle(document.getElementById("doc")).backgroundColor === "rgb(18, 18, 18)"), { what: "dark" });
+    }
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+    // The line Edit landed on is tinted for a moment: still readable.
+    let c = await contrastOf("#doc .CodeMirror-line .cm-header:not(.cm-formatting)", "#doc .CodeMirror .doc-landed");
+    assert.ok(c.ratio >= 3, `${theme}: the landing tint, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    await sleep(1500);
+    // Inline code.
+    c = await contrastOf("#doc .CodeMirror .cm-comment");
+    assert.ok(c.ratio >= 3, `${theme}: inline code, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    // Selected text, focused.
+    await A.evaluate(() => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setSelection({ line: 2, ch: 10 }, { line: 2, ch: 40 }); });
+    await sleep(100);
+    c = await contrastOf("#doc .CodeMirror-line span", "#doc .CodeMirror-selected");
+    assert.ok(c.ratio >= 3, `${theme}: selected text, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    // The toolbar: the active button (side by side, on from the start) readable; separators hairlines, not bars.
+    await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h1")), { what: "split" });
+    await A.mouse.move(5, 400); // no hover
+    c = await contrastOf("#doc .doc-tb-side-by-side.active", "#doc .doc-tb-side-by-side.active");
+    assert.ok(c.ratio >= 3, `${theme}: the active toolbar button, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    const seps = await A.evaluate(() => {
+      const rgb = (s) => (s.match(/[\d.]+/g) ?? []).map(Number);
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+      const bar = rgb(getComputedStyle(document.querySelector("#doc .editor-toolbar")).backgroundColor);
+      const s = getComputedStyle(document.querySelector("#doc .editor-toolbar i.separator"));
+      return [s.borderLeftColor, s.borderRightColor].map((c) => { const v = rgb(c); return (v[3] ?? 1) < 0.1 || s.borderRightWidth === "0px" && c === s.borderRightColor ? 1 : ratio(v, bar); });
+    });
+    assert.ok(seps.every((r) => r <= 3), `${theme}: toolbar separators are hairlines (contrast ${seps.map((r) => r.toFixed(2))})`);
+    await A.click("#doc .doc-tb-side-by-side");
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing")), { what: "Read" });
+  }
+  await A.click(".main-menu-trigger");
+  await A.getByText("Light mode").click();
+  await A.close();
+});
+
+test("docs: what changed on disk is tinted and fades, in Read and in the side-by-side preview: the paragraph, the one bullet, the one table row", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR, file = path.join(dir, "notes", "tint.md");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const doc = (p = "First paragraph.", b = "Bullet two", r = "| 2 | two |") => `# Tint\n\n${p}\n\n- Bullet one\n- ${b}\n- Bullet three\n\n| # | Name |\n|---|---|\n| 1 | one |\n${r}\n| 3 | three |\n\nLast paragraph.\n`;
+  fs.writeFileSync(file, doc());
+  const opened = await cli(["open", "tintboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/tintboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/tint.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1400, height: 900 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+  const tinted = (root) => A.evaluate((r) => [...document.querySelectorAll(`${r} .doc-changed`)].map((e) => [e.tagName, e.textContent.trim().replace(/\s+/g, " "), getComputedStyle(e.tagName === "TR" ? e.firstElementChild : e).animationName]), root);
+  // Read: the agent changes a paragraph, one bullet and one table row.
+  fs.writeFileSync(file, doc("First paragraph, changed.", "Bullet two, changed", "| 2 | two, changed |"));
+  await until(() => A.evaluate(() => document.querySelector("#doc .doc-body").textContent.includes("two, changed")), { what: "the reload" });
+  let t = await tinted("#doc .doc-body");
+  assert.deepEqual(t.map(([tag, text]) => [tag, text]), [["P", "First paragraph, changed."], ["LI", "Bullet two, changed"], ["TR", "2 two, changed"]], JSON.stringify(t));
+  assert.ok(t.every(([, , anim]) => anim === "doc-fade-block"), `they fade: ${JSON.stringify(t)}`);
+  // Side by side: the merged lines light up in the preview too; your own typing doesn't.
+  await A.click("[data-testid=doc-mode]");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+  await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h1")), { what: "the preview, on from the start" });
+  await A.evaluate(() => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setCursor({ line: cm.lastLine(), ch: 0 }); });
+  await A.keyboard.type("Typed by you.");
+  await sleep(1200);
+  assert.deepEqual(await tinted("#doc [data-testid=doc-preview]"), [], "your own typing isn't tinted");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("Bullet three", "Bullet three, from the agent"));
+  await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview]").textContent.includes("three, from the agent")), { what: "the merge in the preview" });
+  await sleep(300);
+  t = await tinted("#doc [data-testid=doc-preview]");
+  assert.deepEqual(t.map(([tag, text]) => [tag, text]), [["LI", "Bullet three, from the agent"]], JSON.stringify(t));
+  await A.close();
+});

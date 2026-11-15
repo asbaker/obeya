@@ -90,6 +90,22 @@ export function pageRoutes({ store, tabs, pages, waits }) {
       return json(res, 200, { text });
     }],
 
+    // Save a doc edited in the tab: {text, base}, base being the text the tab
+    // started from. The file changed meanwhile: 409 doc_changed with its text,
+    // and the tab merges.
+    ["POST", "/api/docs/:doc", async ({ req, res, params: { doc } }) => {
+      const { text, base } = await readJSON(req);
+      if (typeof text !== "string" || typeof base !== "string") throw new ApiError(400, "invalid_json", "send {text, base}: both strings");
+      if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw new ApiError(413, "too_large", "a doc is at most 2 MB");
+      try {
+        store.writeDoc(doc, text, base);
+      } catch (err) {
+        if (err.code === "doc_changed") throw new ApiError(409, err.code, err.message, { text: err.text });
+        throw err;
+      }
+      return json(res, 200, {});
+    }],
+
     ["GET", "/api/pages/:page", ({ res, url, params: { page: name } }) => {
       // The page asks with ifMissing=empty when it opens a page the agent is about to create.
       if (url.searchParams.get("ifMissing") === "empty" && !store.exists(name)) {
@@ -193,6 +209,12 @@ export function pageRoutes({ store, tabs, pages, waits }) {
 
     // Create an empty page now (the New page dialog): saved before anything is drawn.
     ["POST", "/api/pages/:page", ({ res, params: { page: name } }) => {
+      // A doc (the New page dialog's Kind: Doc): an empty markdown file.
+      if (name.endsWith(".md")) {
+        store.createDoc(name);
+        pages.announce();
+        return json(res, 201, { page: name });
+      }
       try {
         store.create(name);
       } catch (err) {

@@ -12,6 +12,8 @@ What changed in each release of obeya. Versions follow [semver](https://semver.o
 - `obeya --skill components`: the parts drawings are made of, named as UI kits and information design name them (card, chip, stepper, table, lanes, callout, …), and the craft of drawing them on a canvas.
 - Numbered pins: `{"pins": {"items": [{"on": "card-3", "note": "Too small"}]}}` in a patch. The server numbers them, puts each on its element and lays the notes out beside; send the same set again to replace it.
 - Markdown docs beside drawings: `.md` files in the pages folder show in the page picker and open read-only in the tab. Link a drawing to a doc's heading (`?page=notes%2Fspec.md#3-requirements`) and a doc to a drawing (`[the plan](?page=notes%2Fplan&element=f2)`); headings use GitHub's anchors. The tab reloads a doc when its file changes.
+- Edit docs in the tab: Edit, top right (or Cmd/Ctrl+E), switches a doc to EasyMDE (MIT, loaded the first time), with a toolbar, side by side and a status bar; Read switches back. The caret lands on the line you were reading, and edits save themselves after a pause. When your agent writes the same file while you type, its lines merge in around yours; if you both changed the same lines, a banner asks: Load theirs or Keep mine. Your agent keeps working with docs as plain files.
+- New doc: the New page dialog has a Kind (Drawing or Doc), and typing a name ending in `.md` in the page picker offers "+ New doc".
 
 ### Changed
 

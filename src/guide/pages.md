@@ -4,7 +4,7 @@
 
 Files under `skipped` have names the tool can't use (one with `\ : * ? " < > |`, or a part starting with `.`): tell the person rather than renaming them.
 
-Markdown files (`.md`) in the pages folder are docs: the person sees them in the page picker and reads them in the tab, read-only. You read and write them as plain files. Link between docs and drawings when it helps (`--skill prototype`).
+Markdown files (`.md`) in the pages folder are docs: the person sees them in the page picker and reads and edits them in the tab. You read and write them as plain files. Link between docs and drawings when it helps (`--skill prototype`).
 
 `obeya rename <page> <new-name>` renames a page or moves it to a folder (`obeya rename overview project-a/overview`); its history, bands, cursors and the person's open tab come along. Then fix the links listed in `staleLinks` with a patch, e.g. `{"elements": [{"id": "go", "link": "?page=<new-name>&element=f2"}]}`. It moves docs too (`obeya rename notes/a.md archive/a.md`); links that name the doc come back in `staleLinks`. Never rename `.excalidraw` files yourself. You can't delete pages.
 
