@@ -63,6 +63,7 @@ document.addEventListener("keydown", (ev) => {
 // The theme the person picked (light or dark) outlives a refresh: this browser
 // remembers it. The export renderer always starts light.
 const THEME_KEY = "obeya.theme";
+const NEWS_SEEN_KEY = "obeya.updateSeen"; // the newest version whose news the person has seen in About
 const savedTheme = () => (!RENDERER && localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light");
 let themeNow = savedTheme();
 
@@ -120,9 +121,21 @@ function Pill({ page, n, waiting, isMobile }) {
 }
 
 function App() {
-  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [] });
+  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [], update: null });
   const [dialog, setDialog] = React.useState(dialogs.state);
   React.useEffect(() => dialogs.subscribe(setDialog), []);
+  // A newer obeya is out: a dot on ☰ and a chip on About obeya until About is
+  // opened for that version (this browser remembers it).
+  const [seen, setSeen] = React.useState(() => localStorage.getItem(NEWS_SEEN_KEY));
+  const news = !RENDERER && ui.update?.to && seen !== ui.update.to ? ui.update : null;
+  React.useEffect(() => { document.body.classList.toggle("xl-has-news", Boolean(news)); }, [news]);
+  React.useEffect(() => {
+    if (dialog !== "about" || !ui.update?.to || seen === ui.update.to) return;
+    localStorage.setItem(NEWS_SEEN_KEY, ui.update.to);
+    setSeen(ui.update.to);
+  }, [dialog, ui.update?.to]);
+  const aboutItem = h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" },
+    h("span", { className: "xl-about-item" }, "About obeya", news ? h("span", { className: "xl-news-chip", "data-testid": "menu-news" }, "New version") : null));
   S.setUi = set;
   S.openPicker = () => openDialog("PICKER");
   S.openExport = () => S.currentPage && openDialog("EXPORT");
@@ -181,7 +194,7 @@ function App() {
               h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this doc…"),
               h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false })),
             h(MainMenu.Separator),
-            h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"))
+            aboutItem)
           : h(MainMenu, null,
             // File-menu order: new, open, rename; then what to do with this page.
             h(MainMenu.Group, { title: "obeya" },
@@ -195,7 +208,7 @@ function App() {
             h(MainMenu.DefaultItems.SearchMenu),
             h(MainMenu.DefaultItems.CommandPalette),
             h(MainMenu.DefaultItems.Help),
-            h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"),
+            aboutItem,
             h(MainMenu.DefaultItems.ClearCanvas),
             h(MainMenu.Separator),
             h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false }),
@@ -207,7 +220,7 @@ function App() {
     dialog === "new" ? h(NewPageDialog, { names: ui.pages.map((p) => p.name), folder: ui.newIn ?? folderOf(ui.page ?? ""), onClose: closeDialog }) : null,
     dialog === "rename" ? h(RenameDialog, { current: ui.page, names: ui.pages.map((p) => p.name), onClose: closeDialog }) : null,
     dialog === "export" ? h(ExportDialog, { page: ui.page, onClose: closeDialog }) : null,
-    dialog === "about" ? h(AboutDialog, { onClose: closeDialog }) : null);
+    dialog === "about" ? h(AboutDialog, { update: ui.update, onClose: closeDialog }) : null);
 }
 
 registerFonts(); // before Excalidraw mounts: its font menu reads the list once

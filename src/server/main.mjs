@@ -24,6 +24,7 @@ import { watchPages } from "./watch.mjs";
 import { pageRoutes } from "./routes/pages.mjs";
 import { renderRoutes } from "./routes/render.mjs";
 import { infoRoutes } from "./routes/info.mjs";
+import { checkForUpdate, pendingUpdate, UPDATE_TTL_MS } from "../lib/update.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(here, "..");
@@ -48,10 +49,20 @@ if (migrateSidecar(DIR)) console.log(`${new Date().toISOString()} moved .excalid
 
 let lastActivity = Date.now();
 const store = new PageStore(DIR, { onNewPage: () => pages.announce() });
-const tabs = createTabs({ store, dir: DIR, onClose: () => (lastActivity = Date.now()) });
+const tabs = createTabs({ store, dir: DIR, version: VERSION, onClose: () => (lastActivity = Date.now()) });
 const pages = watchPages({ dir: DIR, store, broadcast: tabs.broadcast });
 const waits = createWaits({ store, tabs, onEnd: () => (lastActivity = Date.now()) });
-tabs.greet(() => [["waits", { waits: waits.list() }]]); // a tab that connects learns who is waiting
+// A tab that connects learns who is waiting, and whether a newer obeya is out.
+tabs.greet(() => [["waits", { waits: waits.list() }], ["update", { update: pendingUpdate(VERSION) }]]);
+
+// Is a newer obeya out? Asked at start, then once a day; open tabs hear the answer.
+async function checkUpdate() {
+  const before = JSON.stringify(pendingUpdate(VERSION));
+  await checkForUpdate();
+  const now = pendingUpdate(VERSION);
+  if (JSON.stringify(now) !== before) tabs.broadcast("update", { update: now });
+}
+setInterval(() => checkUpdate().catch(() => {}), UPDATE_TTL_MS).unref();
 
 const route = router([
   ...infoRoutes({ tabs, dir: DIR, port: PORT, version: VERSION, idleMinutes: IDLE_MINUTES, shutdown: () => shutdown() }),
@@ -145,4 +156,5 @@ server.listen(PORT, HOST, () => {
   // Versions before 0.1 kept a session token here; don't leave one behind.
   fs.rmSync(legacyTokenFile(DIR, PORT), { force: true });
   console.log(`${new Date().toISOString()} obeya ${VERSION}: http://${HOST}:${PORT} (pages in ${DIR})`);
+  checkUpdate().catch(() => {});
 });

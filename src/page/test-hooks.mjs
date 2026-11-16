@@ -12,6 +12,8 @@ export function installTestHooks() {
   const clone = (x) => JSON.parse(JSON.stringify(x));
   window.obeyaTest = {
     ready: () => Boolean(S.api && S.currentPage),
+    // What the server's daily check would say: {to, headline} or null.
+    setUpdate: (u) => S.setUi((s) => ({ ...s, update: u })),
     page: () => S.currentPage,
     elements: () => clone(S.api.getSceneElements()),
     focusedFrame: () => S.focusedFrame,

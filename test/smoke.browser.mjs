@@ -1188,6 +1188,53 @@ test("branding: the tab title and favicon, the mark in the pill, About obeya", {
   await A.close();
 });
 
+test("update notice: a dot on ☰ and a New version chip on About until About is opened; About's news box", { skip }, async () => {
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  // The server greets a tab with its news (none here: tests don't check); let that land first.
+  await until(() => A.evaluate(() => window.obeyaTest.connection() === "connected"), { what: "connected" });
+  await sleep(300);
+  await A.evaluate(() => localStorage.removeItem("obeya.updateSeen"));
+  const dot = () => A.evaluate(() => getComputedStyle(document.querySelector(".main-menu-trigger"), "::after").content !== "none");
+  // No news: no dot, no chip, About as before.
+  assert.equal(await dot(), false);
+  await A.evaluate(() => window.obeyaTest.setUpdate({ to: "99.0.0", headline: "Stages, pins, docs in the tab" }));
+  await until(dot, { what: "the dot on ☰" });
+  await A.click(".main-menu-trigger");
+  await A.waitForSelector("[data-testid=menu-news]");
+  assert.equal(await A.textContent("[data-testid=menu-news]"), "New version");
+  await A.click("[data-testid=menu-about]");
+  await A.waitForSelector("[data-testid=about-news]");
+  const news = await A.evaluate(() => {
+    const n = document.querySelector("[data-testid=about-news]");
+    return { text: n.textContent, link: n.querySelector("a").href, target: n.querySelector("a").target };
+  });
+  assert.match(news.text, /obeya 99\.0\.0 is out/);
+  assert.match(news.text, /Stages, pins, docs in the tab/);
+  assert.match(news.text, /npm update -g obeya && npx skills update obeya/);
+  assert.deepEqual([news.link, news.target], ["https://github.com/asbaker/obeya/releases/tag/v99.0.0", "_blank"]);
+  // Opening About clears the dot and the chip, and this browser remembers it.
+  await until(async () => !(await dot()), { what: "the dot clears" });
+  assert.equal(await A.evaluate(() => localStorage.getItem("obeya.updateSeen")), "99.0.0");
+  await A.keyboard.press("Escape");
+  await A.click(".main-menu-trigger");
+  await A.waitForSelector("[data-testid=menu-about]");
+  assert.equal(await A.$("[data-testid=menu-news]"), null);
+  await A.keyboard.press("Escape");
+  // A newer release brings them back.
+  await A.evaluate(() => window.obeyaTest.setUpdate({ to: "99.1.0" }));
+  await until(dot, { what: "the dot for the next release" });
+  // No news again: gone.
+  await A.evaluate(() => { window.obeyaTest.setUpdate(null); localStorage.removeItem("obeya.updateSeen"); });
+  await until(async () => !(await dot()), { what: "no news, no dot" });
+  await A.close();
+});
+
 test("a save while a live update is being applied doesn't claim the update's layout as the person's", { skip }, async () => {
   const opened = await cli(["open", "race", "--no-open"]);
   const u = new URL(opened.json.error?.url ?? opened.json.result.url);

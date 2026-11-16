@@ -2,32 +2,6 @@
 
 What changed in each release of obeya. Versions follow [semver](https://semver.org); while obeya is 0.x, a minor release can change what a command prints, and says so under **Changed**.
 
-## [Unreleased]
-
-### Added
-
-- More fonts in the canvas font menu: Inter, Inter Bold, Source Serif, Barlow Condensed and Caveat ship with obeya (140 KB, SIL Open Font License), and Helvetica and Cascadia are no longer hidden. Exported SVGs carry them.
-- Patches name fonts: `"fontFamily": "Inter"` instead of Excalidraw's numbers. An unknown name is refused with the list of fonts.
-- Stages: `obeya patch --style sketch|clean|hifi` (also on `mermaid` and `library insert`). Sketch and clean lay down a medium (hand-drawn strokes and Excalifont; crisp lines and Helvetica) under the patch's own defaults; hifi sets nothing. Colours stay the agent's. Each stage has a brief: `obeya --skill sketch|clean|hifi`, with what they share in `--skill design` (where the look comes from: the page, then your agent's memory of you, then a sample; type sized from the frame; when a slide shape applies). Tell your agent your look (your brand, fonts you like); obeya follows it.
-- `obeya --skill components`: the parts drawings are made of, named as UI kits and information design name them (card, chip, stepper, table, lanes, callout, …), and the craft of drawing them on a canvas.
-- Numbered pins: `{"pins": {"items": [{"on": "card-3", "note": "Too small"}]}}` in a patch. The server numbers them, puts each on its element and lays the notes out beside; send the same set again to replace it.
-- Markdown docs beside drawings: `.md` files in the pages folder show in the page picker and open read-only in the tab. Link a drawing to a doc's heading (`?page=notes%2Fspec.md#3-requirements`) and a doc to a drawing (`[the plan](?page=notes%2Fplan&element=f2)`); headings use GitHub's anchors. The tab reloads a doc when its file changes.
-- Edit docs in the tab: Edit, top right (or Cmd/Ctrl+E), switches a doc to EasyMDE (MIT, loaded the first time), with a toolbar, side by side and a status bar; Read switches back. The caret lands on the line you were reading, and edits save themselves after a pause. When your agent writes the same file while you type, its lines merge in around yours; if you both changed the same lines, a banner asks: Load theirs or Keep mine. Your agent keeps working with docs as plain files.
-- New doc: the New page dialog has a Kind (Drawing or Doc), and typing a name ending in `.md` in the page picker offers "+ New doc".
-
-### Changed
-
-- A patch that creates the same id twice is refused (`invalid_patch`, naming the id) instead of the second silently replacing the first.
-
-### Fixed
-
-- Rewording a text through `elements` kept its old width, cutting the new words off.
-- Redrawing a frame (deleting elements, then creating them again with the same ids) kept their old stacking order, which could hide text under shapes. Re-created elements now stack as new.
-- After the server was killed before saving, deleted elements came back. An open tab now sends back what it had newer when it reconnects.
-- Lint's contrast check read a label in a clear box, or on a see-through tint, against white. It now looks at what's behind.
-- A shape that fills its frame (a background) is locked when it's drawn, so it isn't dragged by accident.
-- A sideways two-finger swipe on a trackpad no longer goes Back.
-
 ## [0.2.1] - 2026-11-13
 
 Fixes for `obeya wait`. Update both: `npm update -g obeya` and `npx skills update obeya`.

@@ -62,7 +62,7 @@ Your agent starts obeya in the background and opens the canvas in your browser. 
 
 ### Update or remove
 
-`npm update -g obeya` and `npx skills update obeya` keep both current; [CHANGELOG.md](CHANGELOG.md) says what's new. Removing obeya leaves your pages where they are; see [INSTALL.md](INSTALL.md#updating-and-removing).
+`npm update -g obeya` and `npx skills update obeya` keep both current; [CHANGELOG.md](CHANGELOG.md) says what's new. When a new version is out, your agent tells you, and a dot on ☰ leads to About obeya with the details. Removing obeya leaves your pages where they are; see [INSTALL.md](INSTALL.md#updating-and-removing).
 
 ## How it works
 
@@ -144,7 +144,7 @@ $ obeya wait signup-flow --frame f-signup --ask "Which sign-in should we build? 
 - 🛡️ Other websites open in your browser can't reach it (it checks `Host`, `Origin` and `Sec-Fetch-Site`).
 - ⚠️ No login or token: other programs and users on the same machine can reach it, as with most local dev servers.
 - 🚫 No telemetry. Pages, screenshots and exports never leave your machine.
-- ⬇️ Downloads only: the pinned Excalidraw editor, its Mermaid converter and fonts (from `esm.sh`), and component libraries you ask for. Your Mermaid text is converted in your browser.
+- ⬇️ Downloads only: the pinned Excalidraw editor, its Mermaid converter and fonts (from `esm.sh`), component libraries you ask for, and once a day obeya's latest version number from the npm registry (`OBEYA_NO_UPDATE_CHECK=1` turns that off). Your Mermaid text is converted in your browser.
 
 ## FAQ
 

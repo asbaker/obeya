@@ -5,9 +5,11 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ensureSidecar, logFile, sameDir } from "../lib/paths.mjs";
+import { isNewer } from "../lib/update.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(here, "..", "server", "main.mjs");
+const VERSION = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8")).version;
 const BROWSER_WAIT_MS = 30000;
 const SERVER_START_MS = 15000; // generous: a busy or slow machine may take a while to start node
 // Tabs left open from the server's last run reconnect by themselves within a
@@ -81,7 +83,12 @@ export async function ensureServer(plan, client, note) {
     if (!sameDir(i.dir, plan.dir)) {
       throw new CliError("port_in_use_other_dir", `port ${plan.port} is serving a canvas for a different directory; pass --port to use another`, { serving: i.dir });
     }
-    return i;
+    if (!isNewer(VERSION, i.version)) return i;
+    // obeya was updated while its server ran: stop the old one (it saves
+    // first), then start this version. Open tabs reconnect and reload.
+    await client.call("POST", "/api/shutdown").catch(() => {});
+    for (let t = 0; t < 50 && (await client.info()); t++) await sleep(100);
+    i = null;
   }
   fs.mkdirSync(plan.dir, { recursive: true });
   ensureSidecar(plan.dir);

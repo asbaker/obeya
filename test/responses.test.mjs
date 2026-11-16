@@ -55,9 +55,10 @@ async function check(argv, { code = 0, keys, budget, stderr = "" }) {
 }
 
 test("server commands: only what the agent acts on", async () => {
-  await check(["status"], { keys: ["running", "url", "portInUse"], budget: 70 });
+  // update (only when a newer obeya is out; sized in update.test.mjs).
+  await check(["status"], { keys: ["running", "url", "portInUse", "update"], budget: 70 });
   await check(["serve"], { keys: ["url", "browsers"], budget: 60 });
-  await check(["status"], { keys: ["running", "url", "browsers", "sameDir"], budget: 80 });
+  await check(["status"], { keys: ["running", "url", "browsers", "sameDir", "update"], budget: 80 });
   await check(["open", "--no-open"], { keys: ["url", "opened", "switched"], budget: 80 });
 });
 

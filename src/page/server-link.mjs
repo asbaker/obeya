@@ -58,6 +58,9 @@ let catchRound = 0;
 // The server names the folder it serves: if the port comes back serving
 // another folder, stop here rather than save this page's edits into it.
 let folder = null;
+// The server's obeya version, from its first hello; a later hello with another
+// one means it was restarted after an update.
+let serverVersion = null;
 let stream = null; // this tab's event stream
 
 // Connected only once the editor is ready, so the server never counts a tab
@@ -90,6 +93,7 @@ function openStream() {
   events.addEventListener("mermaid", (e) => handleMermaid(JSON.parse(e.data)));
   events.addEventListener("libraries-changed", () => loadLibraries());
   events.addEventListener("waits", (e) => setWaits(JSON.parse(e.data).waits));
+  events.addEventListener("update", (e) => S.setUi((s) => ({ ...s, update: JSON.parse(e.data).update })));
   events.addEventListener("doc", (e) => import("./doc.mjs").then(({ reloadDoc }) => reloadDoc(JSON.parse(e.data).name)));
   events.addEventListener("pages", (e) => {
     const { pages, skipped } = JSON.parse(e.data);
@@ -151,11 +155,18 @@ function openStream() {
   // Tabs survive restarts: EventSource reconnects by itself, and
   // the tab then catches up with the server and sends what it couldn't save.
   events.addEventListener("hello", (e) => {
-    const { dir } = JSON.parse(e.data);
+    const { dir, version } = JSON.parse(e.data);
     if (folder && dir !== folder) {
       events.close();
       return connection.send("OTHER_FOLDER");
     }
+    // The server came back as another obeya (an update): load its page code.
+    // Leaving the page saves what's pending (pagehide).
+    if (serverVersion && version && version !== serverVersion && !RENDERER) {
+      events.close();
+      return location.reload();
+    }
+    serverVersion = version;
     folder = dir;
     connection.send("HELLO");
   });

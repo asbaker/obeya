@@ -29,6 +29,7 @@ import { resolveImages } from "./images.mjs";
 import { officialRender, withRenderer } from "./render.mjs";
 import { runExport } from "./export.mjs";
 import { lib, notifyLibraries, runLibrary } from "./library.mjs";
+import { guideNotice, pendingUpdate } from "../lib/update.mjs";
 
 export { CliError };
 
@@ -64,11 +65,14 @@ export async function run(argv, ctx = {}) {
   }
 
   if (plan.skill) {
-    const text = guide(plan.topic);
+    let text = guide(plan.topic);
     if (text === null) {
       io.out.push(JSON.stringify({ error: errorBody("unknown_topic", `no topic "${plan.topic}"`, { topics: guide.topics() }) }));
       return done(1);
     }
+    // A newer obeya is out: two lines under the core's title, so the agent can tell the person.
+    const news = !plan.topic || plan.topic === "all" ? pendingUpdate(VERSION, env) : null;
+    if (news) text = text.replace(/^# obeya\n/m, (t) => `${t}\n${guideNotice(VERSION, news)}\n`);
     io.out.push(text);
     return done(0);
   }
@@ -168,10 +172,13 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     }
     case "status": {
       const i = await client.info();
-      if (i?.foreign) return { running: false, url: client.base, portInUse: true };
-      if (!i) return { running: false, url: client.base };
+      // update only when a newer obeya is out: {to, headline}.
+      const u = pendingUpdate(VERSION, env);
+      const update = u ? { update: u } : {};
+      if (i?.foreign) return { running: false, url: client.base, portInUse: true, ...update };
+      if (!i) return { running: false, url: client.base, ...update };
       // sameDir only when false: another folder's server answered on this port.
-      return { running: true, url: client.base, browsers: i.browsers, ...(sameDir(i.dir, plan.dir) ? {} : { sameDir: false }) };
+      return { running: true, url: client.base, browsers: i.browsers, ...(sameDir(i.dir, plan.dir) ? {} : { sameDir: false }), ...update };
     }
     case "stop": {
       const i = await client.info();
