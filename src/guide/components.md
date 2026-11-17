@@ -20,4 +20,4 @@ Numbered pins for review notes are a patch directive (`--skill patch`).
 - **Size from the frame** (`--skill design`): a chip on a 2,400-px board is about 44 px tall with 22–26 px text.
 - **A stripe on a rounded card** goes inside it as a short rounded pill (inset ~14 px); a square stripe on the edge pokes out of the corners.
 - **Full-frame backgrounds** are locked by the server, so they don't get dragged.
-- Line up repeated components with `layout` (`grid`, `distribute`, `stack`).
+- Line up repeated components with `layout` (`grid`, `distribute`, `align`).

@@ -51,7 +51,7 @@ Let the tool do the arithmetic: don't compute coordinates by hand. A guessed pos
 - `{"align": "left", "ids": ["a", "b"], "to": "c"}`: `left|right|top|bottom|centre-x|centre-y`; without `to`, to their combined box.
 - `{"distribute": "vertical", "ids": ["a", "b", "c"], "gap": 40}`: a fixed gap, or equal gaps between the ends without one.
 - `{"grid": ["n1", "n2", "n3", "n4"], "columns": 2, "gap": 24, "at": [100, 200]}`.
-- `{"stack": "above", "ids": ["card"], "ref": "column"}`: just above (or `below`) one element. Moving something onto a filled shape? Use `place` or `stack`, or it may end up hidden underneath.
+- `{"stack": "above", "ids": ["card"], "ref": "column"}`: drawing order, not position: draws `ids` just on top of (or `below`) `ref`. Moved something onto a filled shape? `place` brings it to the front; otherwise `stack` it above the shape, or it may be hidden underneath.
 
 ## Numbered pins
 

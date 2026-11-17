@@ -35,7 +35,7 @@ obeya lint <page>             # overlaps, clipped text, misrouted arrows, contra
 
 `obeya patch <page> --file -` with JSON on stdin: `skeleton` creates, `elements` edits by `id`, `delete`, `toBack`/`toFront`, `layout` places things for you. **Run `obeya --skill patch` before your first patch**: shapes, examples, layout, and what the editor adjusts.
 
-- **Boards: don't compute coordinates**; `layout` places things (`place`, `align`, `grid`, `stack`). Mockups: a script.
+- **Boards: don't compute coordinates**; `layout` places things (`place`, `align`, `grid`, `distribute`); `stack` sets what's drawn on top. Mockups: a script.
 - **Over ~10 elements, or repetitive**: generate the patch with a short script; base style once via `defaults` (`--skill patch`).
 - Text goes inside shapes as a `label`; bind arrows with `start`/`end`; give a composite object one shared `groupIds`.
 - Read positions back; don't assume them. Fix `warnings` in a follow-up patch.
