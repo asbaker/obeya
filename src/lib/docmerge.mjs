@@ -7,7 +7,6 @@
 // changed it differently it's a clash, and the merged text keeps mine there
 // until the person chooses.
 
-/** A text as lines, each with its line ending. */
 export const splitLines = (text) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 
 /**

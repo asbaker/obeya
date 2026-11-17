@@ -1,5 +1,3 @@
-// Talking to the server: requests, reporting which tab is in use, and the
-// event stream (agent requests, live updates, reconnecting).
 import { wins } from "/lib/merge.mjs";
 import { RENDERER, TAB_ID, S } from "./state.mjs";
 import { toast } from "./ui/common.mjs";
@@ -17,7 +15,6 @@ export function notice(html) {
   document.getElementById("notice").classList.add("on");
 }
 
-// --- server helpers ------------------------------------------------------------
 export async function request(u, init = {}) {
   const r = await fetch(u, init);
   const body = await r.json().catch(() => ({}));
@@ -28,11 +25,9 @@ export const getJSON = (u) => request(u);
 export const postJSON = (u, body, extra = {}) =>
   request(u, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), ...extra });
 
-// --- agent requests (server-sent events) ----------------------------------------
 export const answer = (reqId, body) => postJSON(`/api/answer/${reqId}`, body);
 export const fail = (reqId, code, message) => answer(reqId, { error: { code, message } });
 
-// --- which tab is "in use" ------------------------------------------------------
 // Agent requests go to the tab the person used last. Tell the server whenever
 // this tab is used (focus, pointer, keys) and which page it shows.
 let usedTimer = null;
@@ -61,7 +56,7 @@ let folder = null;
 // The server's obeya version, from its first hello; a later hello with another
 // one means it was restarted after an update.
 let serverVersion = null;
-let stream = null; // this tab's event stream
+let stream = null;
 
 // Connected only once the editor is ready, so the server never counts a tab
 // that can't yet answer agent requests.
@@ -139,7 +134,6 @@ function openStream() {
     if (S.currentPage !== page) return;
     const { pages } = await getJSON("/api/pages").catch(() => ({ pages: [] }));
     const names = pages.map((p) => p.name);
-    // The most recent other page first, then the rest.
     const order = [...new Set([...recentPages().filter((n) => names.includes(n)), ...names])];
     // Leave it first: opening a page saves pending edits to the one on screen,
     // which would bring the deleted page back.

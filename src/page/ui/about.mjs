@@ -1,6 +1,3 @@
-// About obeya (☰ → About obeya): the logo, the version, where the pages are,
-// and the one command an agent needs. When a newer obeya is out, a news box
-// above them: its headline, the update command, and the release notes.
 import { React, h, EXCALIDRAW_VERSION } from "../deps.mjs";
 import { getJSON } from "../server-link.mjs";
 import { closeOnBackdrop } from "./common.mjs";

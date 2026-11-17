@@ -47,7 +47,7 @@ obeya lint <page>             # overlaps, clipped text, misrouted arrows, contra
 - **Whenever the person should look at a page**: after you change it for them, or it asks something (questions, triage, review, ranking). Start `obeya wait <page> --frame <id> --ask "…"` in the background, every round, instead of asking in chat: their marks come back when they press Done (`--skill wait`).
 - **Pictures over text**: compose components (`--skill components`); icons from `--skill library`.
 - **Flowcharts, sequence, class, state, ER diagrams**: Mermaid via `obeya mermaid` (`--skill mermaid`).
-- **Sketch, clean or hifi** (asked, or exploring, converging, presenting): `--skill design` + `--skill <it>`, then `--style <it>`.
+- **Sketch, clean or hifi** (asked for, or chosen for the audience: rough for a working session, hifi for a sign-off): `--skill design` + `--skill <it>`, then `--style <it>`.
 
 ## Check your work
 

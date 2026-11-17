@@ -27,8 +27,6 @@ function dosTime(d) {
 
 /**
  * @param {{name: string, data: Buffer|string}[]} files  names are paths inside the zip (UTF-8)
- * @param {Date} [when]
- * @returns {Buffer}
  */
 export function zip(files, when = new Date()) {
   const { time, date } = dosTime(when);

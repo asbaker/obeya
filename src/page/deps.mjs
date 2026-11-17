@@ -1,6 +1,4 @@
-// Third-party code for the page, in one place: React, and Excalidraw at the
-// pinned build (the only one with native sticky notes). Loaded from esm.sh;
-// drawings never leave this machine.
+// Excalidraw is pinned to the only build with native sticky notes.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import {

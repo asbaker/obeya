@@ -485,7 +485,7 @@ test("a live command right after starting the server waits for tabs from its las
   tab.close();
 });
 
-test("patch: a stage's medium, pins expanded by the server, and an id used twice is refused", async () => {
+test("patch: a look's medium, pins expanded by the server, and an id used twice is refused", async () => {
   const { port } = await start();
   const patch = (body) => raw(port, { method: "POST", path: "/api/pages/st/patch", headers: H(), body });
   const dup = await patch({ skeleton: [{ type: "rectangle", id: "a", x: 0, y: 0 }, { type: "text", id: "a", x: 0, y: 0, text: "x" }] });

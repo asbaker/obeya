@@ -74,7 +74,6 @@ export function placedSize(own, { width, height } = {}) {
   return { width: w, height: w * ratio };
 }
 
-/** Bytes a base64 string decodes to. */
 export const base64Bytes = (s) => Math.floor((s.length * 3) / 4) - (s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0);
 
 /** A problem with a patch's `files` entry, or null (server side). */

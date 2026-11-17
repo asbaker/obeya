@@ -11,9 +11,6 @@ const entry = (o) => ({ rev: ++rev, at: "t", source: "user", fields: [], ...o })
 // A 3x1 row of notes, 40px apart: n1 at 0, n2 at 240, n3 at 480.
 const row = [note("n1", 0, 0), note("n2", 240, 0), note("n3", 480, 0), label("t1", "n1", "Login"), label("t2", "n2", "Search"), label("t3", "n3", "Pay")];
 
-// ---------------------------------------------------------------------------
-// pointsAt geometry
-
 test("an ellipse drawn around a note points at that note only", () => {
   const ellipse = { id: "e", type: "ellipse", x: 200, y: -40, width: 280, height: 280 };
   assert.deepEqual(pointsAt(ellipse, row), ["n2"]);
@@ -78,9 +75,6 @@ test("an unbound arrow points at what its tip touches, else its tail", () => {
   const nowhere = { id: "a", type: "arrow", x: 900, y: 900, points: [[0, 0], [10, 10]] };
   assert.deepEqual(pointsAt(nowhere, row), []);
 });
-
-// ---------------------------------------------------------------------------
-// Change folding
 
 test("a label edit becomes `relabeled` on its container", () => {
   const byId = new Map(row.map((e) => [e.id, e]));

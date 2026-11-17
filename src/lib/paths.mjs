@@ -1,4 +1,3 @@
-// Paths: dir comparison and the sidecar layout.
 
 import fs from "node:fs";
 import path from "node:path";

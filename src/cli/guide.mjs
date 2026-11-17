@@ -1,6 +1,3 @@
-// The guide `obeya --skill` prints, from src/guide/: core.md (always), and one
-// file per topic (`obeya --skill <topic>`), listed in the core's last section.
-// `obeya --skill all` prints the core and every topic.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

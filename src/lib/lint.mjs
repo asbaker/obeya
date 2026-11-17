@@ -72,7 +72,6 @@ export const FIXES = {
   contrast: "darker text or a lighter fill: at least 3:1",
 };
 
-/** The fix for each rule among `findings`, once. */
 export function fixes(findings) {
   const out = {};
   for (const f of findings) out[f.rule] ??= FIXES[f.rule];
@@ -83,8 +82,6 @@ export function fixes(findings) {
  * A finding names its rule and ids; the numbers that say how far, how big or
  * where are fields (by, off, px, …); `frame` only when it's in one.
  * @param {any[]} elements  a page's elements in stacking order (bottom first)
- * @param {{frame?: string, rules?: string[]}} [opts]
- * @returns {{rule: string, ids: string[], frame?: string}[]}
  */
 export function lint(elements, { frame, rules = RULES } = {}) {
   const live = elements.filter((e) => !e.isDeleted);

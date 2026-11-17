@@ -1,6 +1,3 @@
-// "In folder": a list of the folders that have pages (and Top level), so nobody
-// has to remember folder names. "+ New folder…" swaps the list for a name
-// field; Esc there goes back to the list.
 import { foldersOf } from "/lib/names.mjs";
 import { React, h } from "../deps.mjs";
 

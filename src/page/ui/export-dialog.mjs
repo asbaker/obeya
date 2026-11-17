@@ -5,9 +5,7 @@ import { flushSync } from "../sync.mjs";
 import { framesInOrder } from "../present.mjs";
 import { closeOnBackdrop, toast } from "./common.mjs";
 
-// The export dialog: this page only. PNG and SVG export ticked
-// frames or the whole page; PDF and HTML deck are made from frames. Downloads
-// come from the server, which runs the same code as the CLI's `export`.
+// Downloads come from the server, which runs the same code as the CLI's `export`.
 const FORMATS = [
   { key: "png", name: "PNG", sub: "Pictures" },
   { key: "svg", name: "SVG", sub: "Scalable" },

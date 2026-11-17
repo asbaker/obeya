@@ -18,7 +18,6 @@ export function rememberPage(name) {
   localStorage.setItem(RECENT_KEY, JSON.stringify([name, ...recentPages().filter((n) => n !== name)].slice(0, 8)));
 }
 
-// --- pages ---------------------------------------------------------------------
 // A new page is saved when it's created, then opened.
 export const makePage = (name) => postJSON(`/api/pages/${encodeURIComponent(name)}`, {});
 export async function createPage(name) {

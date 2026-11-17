@@ -1,5 +1,3 @@
-// The CLI's link to the server: the HTTP client, starting the server in the
-// background, and opening the person's tab when a command needs one.
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -94,7 +92,7 @@ export async function ensureServer(plan, client, note) {
   ensureSidecar(plan.dir);
   const log = fs.openSync(logFile(plan.dir), "a");
   const child = spawn(process.execPath, [SERVER, "--dir", plan.dir, "--port", String(plan.port), "--idle-timeout", String(plan.idleTimeout)], {
-    env: plan.env ?? process.env, // e.g. the library cache location
+    env: plan.env ?? process.env,
     detached: true,
     stdio: ["ignore", log, log],
   });

@@ -1,10 +1,5 @@
-// Markdown docs, in the same tab as the drawings: ?page=<name>.md. A doc
-// covers the canvas (the drawing underneath stays loaded); Back, a link or the
-// picker leaves it. It opens to read (rendered with marked, pinned on esm.sh
-// and loaded only when a doc opens); Edit, top right, or Cmd/Ctrl+E switches to
-// EasyMDE (./doc-edit.mjs, loaded on the first Edit). Raw HTML in a doc is
-// shown as text and only web, mail and obeya links are followed: a doc is
-// read, never run.
+// Markdown docs over the canvas. Raw HTML is shown as text and only web, mail
+// and obeya links are followed: a doc is read, never run.
 import { anchors, isDocName, resolveDocHref } from "/lib/docs.mjs";
 import { merge3 } from "/lib/docmerge.mjs";
 import { MAC, RENDERER, S } from "./state.mjs";

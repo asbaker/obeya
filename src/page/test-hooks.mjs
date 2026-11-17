@@ -6,7 +6,6 @@ import { applyRemote, editor, flushSync } from "./sync.mjs";
 import { connection } from "./server-link.mjs";
 import { dialogs } from "./ui/dialogs.mjs";
 
-// --- test access (only with ?test=1): read-only, for the browser smoke test -----
 export function installTestHooks() {
   if (params.get("test") !== "1") return;
   const clone = (x) => JSON.parse(JSON.stringify(x));

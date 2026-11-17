@@ -23,7 +23,6 @@ export const GLOBAL_FLAGS = ["dir", "port", "no-open", "idle-timeout", "help"];
  * @property {string[]} [details]
  */
 
-/** @type {Record<string, Command>} */
 export const COMMANDS = {
   serve: {
     usage: "serve",
@@ -102,7 +101,7 @@ export const COMMANDS = {
     mutating: true,
     details: [
       "--file - reads stdin. Creates the page if needed; one undo step. Prints {rev, created, changed, warnings, fixes}.",
-      "--style sketch|clean|hifi: the stage's medium (strokes, fonts) under the patch's own defaults; hifi sets nothing.",
+      "--style sketch|clean|hifi: the look's medium (strokes, fonts) under the patch's own defaults; hifi sets nothing.",
       "The patch format: obeya --skill patch.",
     ],
   },

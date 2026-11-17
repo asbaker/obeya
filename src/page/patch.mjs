@@ -1,6 +1,4 @@
-// Agent patches: validated, laid out, converted and applied in one
-// undo step, in the visible editor for the page on screen or an invisible
-// second editor for any other page.
+// Agent patches: validated, laid out, converted and applied in one undo step.
 import { computeLayout } from "/lib/layout.mjs";
 import { frameAt, outsideOf } from "/lib/geometry.mjs";
 import { h, createRoot, Excalidraw, convertToExcalidrawElements, restoreElements, CaptureUpdateAction } from "./deps.mjs";
@@ -28,7 +26,6 @@ function remeasure(t, box) {
   return { originalText: t.text };
 }
 
-// --- where a patch is applied ------------------------------------------------------
 // The visible editor, for the page on screen; an invisible second editor for any
 // other page. Both expose the same small interface to the patch code.
 const changedSince = (ed) => ed.api.getSceneElementsIncludingDeleted().filter((e) => ed.known.get(e.id) !== e.version);
@@ -80,7 +77,6 @@ async function offscreenEditor(page) {
 // never overlap, and the invisible editor holds one page at a time.
 export const queuePatch = (msg) => editorJob((hold) => handleAgentPatch(msg, hold));
 
-// Fields a re-applied skeleton keeps from the element when it doesn't give them.
 const KEPT_ON_RESKELETON = ["groupIds", "link", "customData", "locked", "angle", "backgroundColor", "strokeColor", "fillStyle", "strokeWidth", "strokeStyle", "roughness", "opacity", "roundness"];
 
 async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], delete: del = [], toBack = [], toFront = [], layout = [], files = {} }, hold) {
@@ -89,8 +85,8 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     // The same id twice in `elements` is one edit (later fields win).
     // restoreElements would give the second a new id and leave a copy behind.
     elements = [...elements.reduce((m, p) => m.set(p?.id, { ...m.get(p?.id), ...p }), new Map()).values()];
-    // Patches never move the person's view: the page on screen gets
-    // it in front of the person; any other page is patched out of sight.
+    // Patches never move the person's view: any page but the one on screen is
+    // patched out of sight.
     const ed = page === S.currentPage ? visibleEditor(hold) : await offscreenEditor(page);
     await ed.flushPending();
     // Images: their files first, so the editor can draw them.
@@ -145,7 +141,7 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     const dangling = deferred.flatMap((d) => [d.start, d.end]).filter((id) => id && !known(id));
     if (dangling.length) return fail(reqId, "unknown_element", `arrow ends refer to unknown element(s): ${[...new Set(dangling)].join(", ")}`);
 
-    // 0. layout directives. Worked out on the scene as the patch
+    // Layout directives are worked out on the scene as the patch
     // leaves it, with new elements at their real sizes (a trial conversion), then
     // applied as positions: skeletons are shifted before the real conversion, so
     // arrows bound to them still meet them; existing elements get x/y edits.
@@ -191,7 +187,6 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       stacks = plan.stacks;
     }
 
-    // 1. skeletons: the high-level API (labels, sticky notes, frames, bound arrows)
     if (skel.length) {
       let converted;
       try {
@@ -231,7 +226,6 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
         }
         out.set(el.id, { ...el, version: (cur?.version ?? 0) + el.version });
       }
-      // A new label belongs to its container's frame.
       for (const el of converted) {
         const box = el.type === "text" && el.containerId && out.get(el.containerId);
         if (box && el.frameId !== (box.frameId ?? null)) out.set(el.id, { ...out.get(el.id), frameId: box.frameId ?? null });
@@ -248,7 +242,6 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       }
       if (!layout.length) for (const d of deferred) bindArrow(out, d, nonce);
     }
-    // 2. raw partial elements: merge onto the existing element, or restore defaults for new ones
     const raw = elements.map((p) => {
       const cur = byId.get(p.id);
       if (!cur) created.push(p.id);
@@ -303,7 +296,6 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     }
     // With layout, bind after the edits: they may have moved an arrow's targets.
     if (layout.length) for (const d of deferred) bindArrow(out, d, nonce);
-    // 3. deletes (and their bound text)
     for (const id of del) {
       for (const e of out.values()) {
         if (e.id === id || e.containerId === id) out.set(e.id, { ...e, isDeleted: true, version: e.version + 1, versionNonce: nonce() });
@@ -352,7 +344,6 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
         moved.has(e.id) ? { ...e, index: null, version: e.version + 1, versionNonce: nonce() } : e);
       for (const e of ordered) if (moved.has(e.id)) out.set(e.id, e); // part of this patch, not the person's edit
     }
-    // Layout `stack`: just above or below a reference element (and its label).
     for (const st of stacks) {
       const set = new Set(st.ids);
       const moving = ordered.filter((e) => set.has(e.id) || set.has(e.containerId));

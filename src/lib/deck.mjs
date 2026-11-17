@@ -46,11 +46,7 @@ export const slug = (s) =>
     .toLowerCase()
     .slice(0, 60) || "frame";
 
-/**
- * Slides for one or more pages, in order. A page without frames is one slide.
- * @param {{name: string, elements: any[]}[]} pages
- * @param {{order?: string[]}} [opts]
- */
+/** Slides for one or more pages, in order. A page without frames is one slide. */
 export function planSlides(pages, { order } = {}) {
   const isFrame = (e) => e.type === "frame" || e.type === "magicframe";
   const framesOf = (p) => live(p.elements).filter(isFrame);
@@ -100,10 +96,7 @@ export function parseCanvasLink(link) {
 /**
  * Clickable areas for a slide: elements on it whose link points at another
  * slide. Positions are fractions of the exported image.
- * @param {object} slide
  * @param {any[]} elements  the slide's page, all elements
- * @param {object[]} slides  every slide (to resolve targets)
- * @param {Record<string, any[]>} elementsByPage
  * @param {{x1,y1,x2,y2}} area  scene bounds the image shows
  */
 export function hotspots(slide, elements, slides, elementsByPage, area) {

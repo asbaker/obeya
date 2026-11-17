@@ -30,7 +30,6 @@ function writePorts(env, ports) {
   fs.renameSync(tmp, file);
 }
 
-/** Can a server listen on 127.0.0.1:port right now? */
 function canListen(port) {
   return new Promise((resolve) => {
     const s = net.createServer();
@@ -53,13 +52,11 @@ async function whoIs(port) {
 /**
  * The port for plan.dir. `remember`: write the choice down (commands that
  * start a server); status and stop only look. Throws {code: "no_free_port"}.
- * @returns {Promise<number>}
  */
 export async function resolvePort(plan, env, { remember = true, base = DEFAULT_PORT } = {}) {
   if (plan.portExplicit) return plan.port;
   const dir = canonicalDir(plan.dir);
   const ports = readPorts(env);
-  // Forget folders that are gone.
   let pruned = false;
   for (const d of Object.keys(ports)) if (d !== dir && !fs.existsSync(d)) (delete ports[d], (pruned = true));
   const usable = async (port) => {

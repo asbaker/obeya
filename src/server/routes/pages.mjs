@@ -1,5 +1,3 @@
-// /api/pages: the page list, reading a page, the person's edits (sync), agent
-// patches, the change log, rename, bands, and pointing the person's view.
 import { ApiError, json, readJSON, requireElement, requirePage } from "../http.mjs";
 import { brief, resolveChanges } from "../../lib/report.mjs";
 import { involving, lint } from "../../lib/lint.mjs";
@@ -7,7 +5,7 @@ import { LayoutError, validateLayout } from "../../lib/layout.mjs";
 import { normalizePageName } from "../../lib/names.mjs";
 import { fileProblem } from "../../lib/images.mjs";
 import { applyDefaults, defaultsProblem } from "../../lib/defaults.mjs";
-import { StageError, applyStage } from "../../lib/stages.mjs";
+import { LookError, applyLook } from "../../lib/looks.mjs";
 import { pinIds, pinSkeleton, pinsProblem } from "../../lib/pins.mjs";
 import { lockBackdrops } from "../../lib/backdrops.mjs";
 import { resolveFonts } from "../../lib/fonts.mjs";
@@ -62,7 +60,6 @@ function validatePatch(body) {
   }
 }
 
-/** @param {{store: any, tabs: any, pages: any}} ctx */
 export function pageRoutes({ store, tabs, pages, waits }) {
   // Recent agent patches per page: a sync may report the editor's late layout
   // for them as the agent's (`layout`), but only for these elements and briefly.
@@ -166,12 +163,12 @@ export function pageRoutes({ store, tabs, pages, waits }) {
         delete body.defaults;
       }
       if (body.skeleton) lockBackdrops(body.skeleton, new Map(live.filter((e) => e.type === "frame").map((f) => [f.id, f])), existing);
-      // Under those, the stage's medium (--style sketch|clean|hifi): strokes and fonts, never colours.
+      // Under those, the look's medium (--style sketch|clean|hifi): strokes and fonts, never colours.
       if (body.style !== undefined) {
         try {
-          applyStage(body, body.style, existing);
+          applyLook(body, body.style, existing);
         } catch (err) {
-          if (err instanceof StageError) throw new ApiError(400, err.code, err.message);
+          if (err instanceof LookError) throw new ApiError(400, err.code, err.message);
           throw err;
         }
         delete body.style;

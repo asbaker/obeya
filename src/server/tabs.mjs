@@ -1,5 +1,3 @@
-// The browser channel: connected tabs on server-sent events, and requests the
-// server makes of a tab (an agent patch, a render) with their answers.
 import { ApiError } from "./http.mjs";
 import { validPageName } from "../lib/names.mjs";
 

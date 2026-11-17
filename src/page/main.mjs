@@ -1,6 +1,4 @@
-// The canvas page: mounts Excalidraw with our controls, and wires keys,
-// pages, sync and the event stream together. No build step: the browser loads
-// these modules straight from the server.
+// No build step: the browser loads these modules straight from the server.
 import { React, h, createRoot, Excalidraw, MainMenu, WelcomeScreen } from "./deps.mjs";
 import { params, RENDERER, MAC, KEY_PAGES, KEY_PRESENT, KEY_EXPORT, S } from "./state.mjs";
 import { baseName, folderOf, shortFolder } from "/lib/names.mjs";
@@ -196,7 +194,6 @@ function App() {
             h(MainMenu.Separator),
             aboutItem)
           : h(MainMenu, null,
-            // File-menu order: new, open, rename; then what to do with this page.
             h(MainMenu.Group, { title: "obeya" },
               h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
               h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),

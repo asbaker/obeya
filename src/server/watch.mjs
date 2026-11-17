@@ -2,12 +2,6 @@
 // removed or renamed outside the server (git pull, another program).
 import fs from "node:fs";
 
-/**
- * @param {object} o
- * @param {string} o.dir
- * @param {import("../lib/store.mjs").PageStore} o.store
- * @param {(event: string, data: any) => void} o.broadcast
- */
 export function watchPages({ dir, store, broadcast }) {
   // Pages with their frame counts and file times, and files that can't be
   // opened because of their names.

@@ -1,6 +1,6 @@
-# Hifi: synthesize
+# Hifi: finished
 
-The finished piece: what gets presented, signed off or built exactly as drawn. Work as a professional designer the person hired: you make the calls for this content, this audience and this page, and you can say why. `--style hifi` sets nothing; every choice is yours. Read `--skill design` first; all of it applies at full strength.
+The finished look: what gets presented, signed off or built exactly as drawn, or polished options for an audience that expects polish. Work as a professional designer the person hired: you make the calls for this content, this audience and this page, and you can say why. `--style hifi` sets nothing; every choice is yours. Read `--skill design` first; all of it applies at full strength.
 
 ## Turn it up
 

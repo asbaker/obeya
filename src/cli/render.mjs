@@ -1,6 +1,3 @@
-// Who renders a shot or export: the person's tab, else a headless Chrome
-// started for the purpose, else the official Excalidraw CLI if installed,
-// else a tab opened as usual.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,7 +57,6 @@ export async function withRenderer(plan, client, note, env, fn, { offline, used 
   }
 }
 
-/** Path of an executable on PATH, or null. */
 function onPath(name, env) {
   const exts = process.platform === "win32" ? ["", ".cmd", ".exe"] : [""];
   for (const dir of (env.PATH ?? "").split(path.delimiter)) {

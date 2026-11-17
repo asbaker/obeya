@@ -37,7 +37,7 @@ Keys are element types, `label` (labels) and `*` (everything). An element's own 
 
 Fonts by name in `fontFamily`: `Excalifont` (hand-drawn), `Nunito`, `Lilita One`, `Comic Shanns`, `Helvetica`, `Cascadia` (code), `Inter`, `Inter Bold`, `Source Serif`, `Barlow Condensed`, `Caveat` (neat handwriting).
 
-**A stage's medium:** `obeya patch <page> --style sketch|clean|hifi` fills in strokes and fonts under your `defaults` (sketch: rough, Excalifont; clean: crisp, Helvetica; hifi: nothing). Colours stay yours (`--skill design`).
+**A look's medium:** `obeya patch <page> --style sketch|clean|hifi` fills in strokes and fonts under your `defaults` (sketch: rough, Excalifont; clean: crisp, Helvetica; hifi: nothing). Colours stay yours (`--skill design`).
 
 Arrows and lines: give `points` relative to `x`/`y` (`"points": [[0, 0], [0, 60]]` goes straight down 60), with `width`/`height` matching; bind arrows with `start`/`end` instead when they join shapes. A label is its own text element: to recolour or resize one, edit it by its id (`get` shows it as the shape's label).
 

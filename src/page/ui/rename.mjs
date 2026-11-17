@@ -1,5 +1,3 @@
-// Rename, move or delete the page on screen (☰ → Rename or move this page…).
-// Moving is renaming into another folder; delete asks first.
 import { validPageName, normalizePageName, joinName, folderOf, baseName, NAME_RULE } from "/lib/names.mjs";
 import { React, h } from "../deps.mjs";
 import { getJSON, postJSON, request } from "../server-link.mjs";

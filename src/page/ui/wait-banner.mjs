@@ -1,8 +1,5 @@
-// An agent waiting for the person (`obeya wait`): its ask in a banner under the
-// toolbar, a Done button (Cmd/Ctrl+Enter), and the frame it's about outlined.
-// Shown only in tabs on the page being waited on. Elsewhere it stays quiet so
-// the person keeps their focus: the page pill counts the pages waited on, the
-// picker marks them, and the waited page's tab title gets a "●".
+// Shown only in tabs on the page being waited on; elsewhere it stays quiet so
+// the person keeps their focus.
 import { React, h } from "../deps.mjs";
 import { MAC, RENDERER, S } from "../state.mjs";
 import { postJSON } from "../server-link.mjs";
@@ -11,7 +8,6 @@ import { toast } from "./common.mjs";
 
 export const KEY_DONE = MAC ? "⌘↵" : "Ctrl+Enter";
 
-/** The waits on `page`. */
 export const waitsOn = (page) => (S.waits ?? []).filter((w) => w.page === page);
 
 /** "● obeya - kanban" while an agent waits on this page: easy to find among browser tabs. */
@@ -20,7 +16,6 @@ export function setTitle() {
   document.title = `${waitsOn(S.currentPage).length ? "● " : ""}obeya - ${S.currentPage}`;
 }
 
-/** New list from the server. */
 export function setWaits(waits) {
   S.waits = waits;
   setTitle();

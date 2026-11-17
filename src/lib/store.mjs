@@ -81,19 +81,14 @@ export function byIndex(elements) {
 }
 
 export class PageStore {
-  /**
-   * @param {string} dir
-   * @param {{saveDelayMs?: number, onNewPage?: (name: string) => void, now?: () => string}} [opts]
-   */
   constructor(dir, opts = {}) {
     this.dir = dir;
     this.saveDelayMs = opts.saveDelayMs ?? 300;
     this.onNewPage = opts.onNewPage ?? (() => {});
     this.now = opts.now ?? (() => new Date().toISOString());
-    /** @type {Map<string, {scene: any, byId: Map<string, any>, rev: number, log: any[]}>} */
     this.pages = new Map();
     this.timers = new Map();
-    this.gone = new Set(); // see retired()
+    this.gone = new Set();
     fs.mkdirSync(dir, { recursive: true });
     ensureSidecar(dir);
     this.cursors = this.#readCursors();
@@ -117,11 +112,7 @@ export class PageStore {
     return [...names].sort();
   }
 
-  /**
-   * Markdown docs below the pages folder (shown read-only in the tab, beside
-   * the drawings): [{name: "v0.3/spec.md", modified}]. Names follow the page
-   * rule, with ".md" kept so a doc and a drawing can share a base name.
-   */
+  /** [{name: "notes/spec.md", modified}]. Names follow the page rule, with ".md" kept so a doc and a drawing can share a base name. */
   docs() {
     this.docWords ??= new Map(); // file → {mtimeMs, words}, so a listing doesn't re-read unchanged docs
     return walk(this.dir, "", [], ".md").filter(([, n]) => n).map(([rel, n]) => {
@@ -154,7 +145,6 @@ export class PageStore {
     }
   }
 
-  /** A page for the page picker: its revision, how many frames it has, and when its file last changed. */
   summary(name) {
     const p = this.load(name);
     let modified = null;
@@ -235,10 +225,6 @@ export class PageStore {
     this.scheduleSave(name);
   }
 
-  /**
-   * @param {{since?: number|"last", source?: string, consumer?: string}} q
-   * @returns {{rev: number, since: number, entries: any[]}}
-   */
   changes(name, { since = 0, source, consumer = "default" } = {}) {
     const p = this.load(name);
     const from = since === "last" ? this.cursors[name]?.[consumer] ?? 0 : Number(since) || 0;
@@ -349,7 +335,6 @@ export class PageStore {
     this.pages.delete(from);
   }
 
-  /** Whether a markdown doc exists (a file named by the page rule plus ".md"). */
   docExists(name) {
     return typeof name === "string" && name.endsWith(".md") && validPageName(name.slice(0, -3)) && isFile(path.join(this.dir, name));
   }
@@ -455,7 +440,6 @@ export class PageStore {
     if (clash) throw pageError("page_exists", `"${name}" differs from "${clash}" only in capitals`);
   }
 
-  // Remove the folders a page left behind if they're now empty (pages and sidecar).
   #pruneFolders(name) {
     const parts = name.split("/").slice(0, -1);
     for (const root of [this.dir, path.join(this.dir, ".obeya")]) {
@@ -483,7 +467,6 @@ export class PageStore {
     return out;
   }
 
-  /** Save every page with a pending save. */
   flush() {
     for (const name of [...this.timers.keys()]) this.save(name);
   }

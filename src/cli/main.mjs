@@ -1,12 +1,5 @@
-// obeya CLI: the agent's side of the canvas. Talks only to the local
-// server, and starts it in the background when it isn't running.
-//
-// Every command prints one compact JSON line on stdout:
-//   {"result": {...}}
-//   {"error": {"code": "...", "message": "...", "hint": "...", ...}}
-// or nothing, when a success has nothing to report (stop, show): exit 0 says it.
-// A result carries only what the agent acts on: no echo of its arguments, no
-// debugging fields, no prose that restates fields. test/responses.test.mjs keeps it so.
+// One compact JSON line per command ({result} or {error}), or nothing when a
+// success has nothing to report; test/responses.test.mjs holds each command's keys.
 // Exit codes: 0 ok, 1 error, 2 the person needs to act (open the link).
 
 
@@ -42,8 +35,6 @@ const PERSON_ACTS = new Set(["no_canvas_open", "canvas_not_connected"]);
 /**
  * Run the CLI. Returns {stdout, stderr, code} so tests can call it in-process;
  * the bin script prints and exits.
- * @param {string[]} argv
- * @param {{env?: Record<string,string|undefined>, cwd?: string, stdin?: () => string, onStderr?: (line: string) => void}} [ctx]
  */
 export async function run(argv, ctx = {}) {
   const env = ctx.env ?? process.env;
@@ -141,7 +132,6 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
   const spec = lookup(cmd);
 
   // Read inputs before any side effect, so a bad patch never starts a server or opens a tab.
-  // Images: each `src` (a local file) becomes a fileId plus the file.
   const patch = cmd === "patch" ? resolveImages(readPatch(flags.file, cwd, stdin), cwd) : null;
   const mermaidText = cmd === "mermaid" ? readText(flags.file, cwd, stdin) : null;
   if (mermaidText !== null && !mermaidText.trim()) throw new CliError("invalid_argument", `--file ${flags.file} is empty`);

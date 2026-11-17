@@ -8,7 +8,6 @@ export const WATCHED = [
   "backgroundColor", "strokeColor", "link", "groupIds", "points", "customData", "name",
 ];
 
-/** Does `incoming` replace `current`? */
 export function wins(incoming, current) {
   if (!current) return true;
   const vi = incoming.version ?? 0;
@@ -34,8 +33,6 @@ const r = Math.round;
 /**
  * Merge `incoming` into `byId` (mutated). Returns one change record per
  * element that won and changed something reportable, without rev/at/source.
- * @param {Map<string, any>} byId
- * @param {any[]} incoming
  */
 export function mergeElements(byId, incoming) {
   const changes = [];

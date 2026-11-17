@@ -19,14 +19,12 @@ export const DECK_FORMATS = ["html", "pdf"];
 export const MIME = { svg: "image/svg+xml", png: "image/png", html: "text/html; charset=utf-8", pdf: "application/pdf", zip: "application/zip" };
 
 /**
- * @param {object} req
  * @param {"svg"|"png"|"html"|"pdf"} req.format
  * @param {{name: string, elements: any[]}[]} req.pages  pages in order (images take one)
  * @param {boolean} [req.frames]  images: one file per frame
  * @param {string} [req.frame]    images: one frame
  * @param {string[]} [req.order]  frame ids to pick and order
  * @param {string} [req.title]    decks: a title slide
- * @param {object} io
  * @param {(items: {page: string, frame?: string}[], type: "svg"|"png") => Promise<any[]>} io.render
  * @param {string|null} [io.chrome]  a Chrome binary, for pdf
  * @param {string} [io.workDir]      for pdf's temporary files (the sidecar dir)

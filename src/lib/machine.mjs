@@ -16,9 +16,6 @@ export class TransitionError extends Error {
   }
 }
 
-/**
- * @param {{name?: string, initial: string, states: Record<string, {on?: Record<string, string>}>}} table
- */
 export function createMachine(table) {
   const { name = "machine", initial, states } = table;
   if (!states[initial]) throw new Error(`${name}: unknown initial state ${initial}`);
@@ -31,9 +28,7 @@ export function createMachine(table) {
   const listeners = new Set();
   return {
     get state() { return state; },
-    /** Whether `event` is listed for the current state. */
     can: (event) => Boolean(states[state].on?.[event]),
-    /** Take the transition for `event`; returns the new state. */
     send(event) {
       const to = states[state].on?.[event];
       if (!to) throw new TransitionError(name, state, event);

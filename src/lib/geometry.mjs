@@ -94,7 +94,6 @@ export function boxAround(elements, ids, margin = 40) {
   };
 }
 
-/** Does element `e` overlap box `b`? */
 export const overlapsBox = (e, b) => {
   const r = bounds(e);
   return r.x1 < b.x2 && r.x2 > b.x1 && r.y1 < b.y2 && r.y2 > b.y1;

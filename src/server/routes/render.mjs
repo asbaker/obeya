@@ -1,6 +1,3 @@
-// Rendering through a tab (the person's, or a headless renderer): images for
-// the CLI's `shot` and `export`, the export dialog's download, and library
-// contact sheets.
 import path from "node:path";
 import { ApiError, json, readJSON, requireElement, requirePage } from "../http.mjs";
 import { buildExport, DECK_FORMATS, ExportError, IMAGE_FORMATS, MIME } from "../../lib/exporter.mjs";
@@ -9,10 +6,8 @@ import { exportStem, normalizePageName, validPageName } from "../../lib/names.mj
 import { zip } from "../../lib/zip.mjs";
 import { sidecarDir } from "../../lib/paths.mjs";
 
-/** @param {{store: any, tabs: any, dir: string}} ctx */
 export function renderRoutes({ store, tabs, dir }) {
   return [
-    // A labelled contact sheet of library items.
     ["POST", "/api/library-sheet", async ({ req, res }) => {
       const body = await readJSON(req);
       if (!Array.isArray(body.items) || !body.items.length) throw new ApiError(400, "invalid_argument", "a sheet needs items");

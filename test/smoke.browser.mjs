@@ -38,7 +38,7 @@ try {
 } catch {}
 const skip = !CHROME ? "no Chrome or Chromium found (set CHROME_PATH)" : !chromium ? "playwright-core not installed (npm install)" : false;
 
-const S = {}; // shared state
+const S = {};
 
 /** Run the real CLI binary. */
 function cli(args, { stdin } = {}) {
@@ -119,7 +119,6 @@ after(async () => {
   await S.catalogue?.close();
 });
 
-// --- helpers on the person's side ---------------------------------------------------
 const T = (fn, ...args) => S.page.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
 const el = async (id) => (await T("elements")).find((e) => e.id === id);
 const client = (x, y) => T("toClient", x, y);
@@ -472,7 +471,6 @@ test("concurrency: the person drags while agent patches land; nothing is misattr
   })();
   await Promise.all([person, agent]);
 
-  // Let the last sync land, then compare.
   await sleep(1200);
   const all = (await cli(["changes", "board", "--since", String(start), "--source", "all"])).json.result.changes;
   const user = all.filter((c) => c.source === "user");
@@ -1808,7 +1806,7 @@ test("mermaid: a flowchart as editable elements with stable ids; re-running repl
   await A.close();
 });
 
-test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a stage's medium; a full-frame background is locked; an id twice is refused", { skip }, async () => {
+test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a look's medium; a full-frame background is locked; an id twice is refused", { skip }, async () => {
   const opened = await cli(["open", "v03", "--no-open"]);
   const u = new URL(opened.json.error?.url ?? opened.json.result.url);
   u.searchParams.set("test", "1");
@@ -1825,7 +1823,7 @@ test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a
   r = await patch({ skeleton: [{ type: "rectangle", id: "R", x: 0, y: 0, width: 300, height: 200, backgroundColor: "#0f2a3a", fillStyle: "solid" }, { type: "text", id: "T", x: 20, y: 20, text: "hello", strokeColor: "#ffffff" }] });
   assert.equal(r.code, 0, r.stdout);
   await until(async () => { const o = await order(); return o.indexOf("R") < o.indexOf("T"); }, { what: "the redrawn text above its panel" });
-  // A stage's medium, a locked background, and pins.
+  // A look's medium, a locked background, and pins.
   r = await patch({ skeleton: [
     { type: "frame", id: "fr", x: 1000, y: 0, width: 800, height: 500, name: "fr" },
     { type: "rectangle", id: "fr-bg", x: 1000, y: 0, width: 800, height: 500, frameId: "fr", backgroundColor: "#f6f7f9", fillStyle: "solid" },
@@ -1843,7 +1841,7 @@ test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a
   r = await patch({ pins: { id: "rv", items: [{ on: "card", note: "Still small" }, { on: "fr-bg", note: "Nice" }] } });
   assert.equal(r.code, 0, r.stdout);
   await until(async () => (await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.customData?.pins === "rv" && e.customData.pin).length)) === 2, { what: "two pins" });
-  // Re-applying a free text's skeleton keeps its font, with or without a stage.
+  // Re-applying a free text's skeleton keeps its font, with or without a look.
   r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title", fontFamily: "Nunito", fontSize: 40 }] }, "--style", "clean");
   const font = (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily));
   r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title, again" }] }, "--style", "clean");

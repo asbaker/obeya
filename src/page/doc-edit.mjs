@@ -1,17 +1,5 @@
-// Edit a markdown doc in the tab, with EasyMDE (MIT; CodeMirror 5 inside),
-// loaded from esm.sh, pinned and bundled (one CodeMirror for it and its
-// add-ons), the first time a doc goes to Edit. Loaded by ./doc.mjs.
-//
-// Saving: 800 ms after typing stops (and on leaving), through the server, with
-// `base`: the text the tab last loaded or saved. The agent writes docs as plain
-// files, so the file can change under the editor: then a three-way merge by
-// line (/lib/docmerge.mjs) brings their lines in around the caret, tinted for a
-// moment. Where both changed the same lines, a banner asks: Load theirs or Keep
-// mine; nothing is saved until then, and closing the tab asks first.
-//
-// Side by side is ours, not EasyMDE's (that one is built for full screen): a
-// preview pane beside the editor, rendered like Read, the two scrolling
-// together by source line (/lib/docsync.mjs).
+// Edit a markdown doc with EasyMDE, bundled on esm.sh so it and its add-ons
+// share one CodeMirror. Side by side is ours: EasyMDE's is built for full screen.
 import { lineHunks, merge3 } from "/lib/docmerge.mjs";
 import { lineToY, yToLine } from "/lib/docsync.mjs";
 import { postJSON, getJSON } from "./server-link.mjs";
@@ -63,7 +51,6 @@ async function load() {
   EasyMDE = (await import(EASYMDE)).default;
 }
 
-/** Edit doc `n` in `box`, the caret on `line`. */
 export async function enter(n, box, line = 0) {
   await load();
   const { text } = await getJSON(`/api/docs/${encodeURIComponent(n)}`);
@@ -250,19 +237,10 @@ function dropClash() {
   clash = null;
 }
 
-// --- side by side -------------------------------------------------------------
-// The preview pane sits beside CodeMirror inside EasyMDE's container; page.css
-// lays the split out as a grid the height of the window (toolbar, two panes,
-// status bar), so the page itself doesn't scroll. While split, CodeMirror draws
-// every line, so its line heights are measured: estimated heights of long,
-// wrapped lines put the panes whole blocks apart.
-//
-// Scrolling: either pane's top is a fractional source line (the editor's from
-// CodeMirror's line geometry, the preview's from its blocks' data-line), and
-// the other pane goes to the same line. Whoever scrolls leads: wheel, scrollbar,
-// keys, find, typing. Our own scrolling of the other pane is told apart by
-// where it lands (the position we set), not by timing, so trackpad momentum
-// can't make the panes fight.
+// While split, CodeMirror draws every line so its line heights are measured:
+// estimated heights of long, wrapped lines put the panes whole blocks apart.
+// Whoever scrolls leads. Our own scrolling of the other pane is told apart by
+// where it lands, not by timing, so trackpad momentum can't make the panes fight.
 let splitPane = null;
 let renderTimer = null;
 let flashNext = null; // lines merged in, to light up in the preview once it has rendered them
@@ -301,7 +279,6 @@ function split(on) {
   }
 }
 
-// The preview, rendered like Read; after typing, a moment later.
 async function render() {
   if (!splitPane) return;
   const pane = splitPane, top = pane.scrollTop;
@@ -317,7 +294,6 @@ function renderSoon() {
   }), 150);
 }
 
-// The preview's blocks, by source line and top, ending at the doc's end.
 function blocks() {
   const pane = splitPane, top = pane.getBoundingClientRect().top - pane.scrollTop;
   const bs = [...pane.querySelectorAll(":scope > [data-line]")].map((b) => ({ line: Number(b.dataset.line), y: b.getBoundingClientRect().top - top }));
@@ -325,7 +301,6 @@ function blocks() {
   return bs;
 }
 
-// The editor's top as a fractional line, and the scroll position for one.
 function editorLine(cm) {
   const top = cm.getScrollInfo().top;
   const l = cm.lineAtHeight(top, "local");
@@ -410,5 +385,4 @@ function onPageHide() {
   }).catch(() => {});
 }
 
-// For the smoke test.
 export const state = () => ({ name, base, saving, clash: Boolean(clash), value: ed?.value() ?? null });

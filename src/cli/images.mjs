@@ -1,6 +1,4 @@
-// Images in a patch: the CLI reads each `src` (a local file),
-// checks it, and swaps it for a `fileId` plus the file in `files`. The path
-// itself goes no further.
+// A local path never leaves the CLI: only the file's bytes go to the server.
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -27,10 +25,6 @@ export function readImage(src, cwd) {
   return { id, mimeType, dataURL: `data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`, own: dimensions(bytes, mimeType) };
 }
 
-/**
- * Swap every `src` in the patch's skeleton and elements for a fileId (and a
- * size), adding the files to `patch.files`. Returns the patch.
- */
 export function resolveImages(patch, cwd) {
   const entries = [...(Array.isArray(patch.skeleton) ? patch.skeleton : []), ...(Array.isArray(patch.elements) ? patch.elements : [])].filter(IMAGE_ENTRY);
   if (!entries.length) return patch;

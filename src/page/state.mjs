@@ -1,7 +1,5 @@
-// What the page's modules share: the URL it was opened with, who this tab is,
-// keyboard names, and one mutable state object.
-// No session token: the server only answers this origin. Links from
-// versions before 0.1 carry #token=…; drop it, and the token they stored.
+// No session token: the server only answers this origin. Links from before 0.1
+// carry #token=…; drop it.
 export const params = new URLSearchParams(location.search);
 // A doc's heading (?page=spec.md#3-requirements) keeps its hash.
 if (location.hash.startsWith("#token=")) history.replaceState(null, "", location.pathname + location.search);
@@ -32,7 +30,6 @@ export const S = {
   known: new Map(), // id -> version we last sent to / received from the server
   connected: false, // the event stream is open to the server serving this tab's folder
   lastInputAt: 0, // when the person last did something that can edit (see sync.mjs, settling)
-  // Present
   waits: [], // agents waiting for the person (obeya wait), on any page
   focusedFrame: null,
   hiddenIds: new Set(),

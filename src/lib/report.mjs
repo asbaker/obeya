@@ -5,7 +5,6 @@ import { area, bounds, contains, overlapScore } from "./geometry.mjs";
 
 const round = Math.round;
 
-/** Map container id -> its bound text's text, for live elements. */
 export function labelsByContainer(elements) {
   const m = new Map();
   for (const e of elements) {
@@ -74,7 +73,6 @@ export function lean(elements) {
   });
 }
 
-/** A plain-text outline of a page. */
 export function outline(page, rev, elements, { frame } = {}) {
   const els = compact(elements);
   const frames = els.filter((e) => e.type === "frame");
@@ -219,8 +217,6 @@ export function pointsAt(anno, elements) {
     .map(([id]) => id);
 }
 
-// ---------------------------------------------------------------------------
-// Change folding
 
 /**
  * Edits to bound text become `relabeled` on the container. Label moves that
@@ -323,7 +319,6 @@ export function dropFollowers(entries, byId, movedIn = entries) {
   });
 }
 
-/** Which side of a band a coordinate is on. */
 export function side(band, v) {
   return v < band.from ? "before" : v > band.to ? "after" : "inside";
 }
@@ -383,7 +378,6 @@ export function brief(changes, { withSource = false } = {}) {
   return changes.map((c) => {
     const r = { op: c.op, id: c.id, type: c.type };
     if (withSource) r.source = c.source;
-    // New or reworded text is what the person wrote: in full. Otherwise it only names the element.
     if (c.text) r.text = c.op === "added" || c.op === "relabeled" || c.text.length <= TEXT_MAX ? c.text : c.text.slice(0, TEXT_MAX - 1) + "…";
     if (c.op === "modified") {
       const said = new Set([...(c.moved ? ["x", "y"] : []), ...(c.frameChange ? ["frameId"] : [])]);

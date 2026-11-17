@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-// obeya server: a local-only bridge between the Excalidraw page (the
-// person) and the CLI (the agent). No dependencies. Binds to 127.0.0.1 only.
-//
 //   node src/server/main.mjs --dir <pages dir> --port <n> [--idle-timeout <minutes>]
-//
-// Usually started by the CLI, not by hand. The server is the only writer of
-// .excalidraw files, and it writes inside --dir only.
+// Started by the CLI. Binds to 127.0.0.1 only; the only writer of .excalidraw
+// files, and only inside --dir.
 
 import http from "node:http";
 import fs from "node:fs";

@@ -1,6 +1,6 @@
 # Design: think before you draw
 
-Read once per drawing session; `sketch`, `clean` and `hifi` say how far to take it. Whatever you make (a board, a slide, a diagram, a mockup, a chart), work like a professional designer: the right call for this content and this audience, not a house style. Everything here is advice to use with judgment.
+Read once per drawing session; `sketch`, `clean` and `hifi` say how far to take it. Whatever you make (a board, a slide, a diagram, a mockup, a chart), work like a professional designer: the right call for this content and this audience, not a house style. Everything here is advice to use with judgment. Fidelity is a look, not a phase: how many options, rounds and frames is the person's call, or a process skill's.
 
 ## Find the look first
 

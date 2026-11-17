@@ -1,6 +1,3 @@
-// Make a new page (☰ → New page…, the picker's + New or + page here): a kind
-// (a drawing, or a markdown doc, which opens in Edit), a name and a folder;
-// saved now, then opened. The kind last chosen is remembered.
 import { validPageName, normalizePageName, joinName, NAME_RULE } from "/lib/names.mjs";
 import { React, h } from "../deps.mjs";
 import { makePage, openPage } from "../pages.mjs";

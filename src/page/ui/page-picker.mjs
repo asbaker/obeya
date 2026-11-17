@@ -1,5 +1,3 @@
-// The page picker: search, recent pages, every page A–Z, and files that can't
-// be opened. Cmd+O / Ctrl+O, the pill, or ☰ → Open page….
 import { validPageName, normalizePageName, joinName, folderOf, baseName, foldersOf, NAME_RULE } from "/lib/names.mjs";
 import { React, h } from "../deps.mjs";
 import { KEY_PAGES } from "../state.mjs";
@@ -34,7 +32,6 @@ export function PagePicker({ pages, skipped, current, waiting = new Set(), onClo
   // Details (frame counts, times) when it opens, and again when the list changes.
   React.useEffect(() => { getJSON("/api/pages").then(setFresh).catch(() => {}); }, [pages, skipped]);
   React.useEffect(() => { document.querySelector(".xl-row.hl")?.scrollIntoView({ block: "nearest" }); });
-  // Drawings and markdown docs (read-only), in one list.
   const list = [...(fresh?.pages ?? pages), ...(fresh?.docs ?? []).map((d) => ({ ...d, doc: true }))], skip = fresh?.skipped ?? skipped;
   const names = list.map((p) => p.name);
   const byName = new Map(list.map((p) => [p.name, p]));

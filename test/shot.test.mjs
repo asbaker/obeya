@@ -44,7 +44,7 @@ let input = ""; process.stdin.on("data", (d) => (input += d)).on("end", () => {
   const env = {
     ...process.env,
     PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-    CHROME_PATH: path.join(dir, "no-chrome-here"), // simulate a machine without Chrome
+    CHROME_PATH: path.join(dir, "no-chrome-here"),
     OBEYA_DIR: pages,
     OBEYA_PORT: String(await freePort()),
   };
