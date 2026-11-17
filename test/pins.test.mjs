@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinIds, pinSkeleton, pinsProblem } from "../src/lib/pins.mjs";
+import { pinIds, pinSetIds, pinSkeleton, pinsProblem } from "../src/lib/pins.mjs";
 
 const boxes = new Map([
   ["a", { x: 0, y: 0, width: 100, height: 50, frameId: "f" }],
@@ -36,4 +36,10 @@ test("pins on a slide: notes that don't fit go just outside the frame, unframed"
   assert.ok(note.x > 1280, "beside the slide");
   assert.equal(note.frameId, null);
   assert.equal(sk.find((e) => e.id === "pins-1").frameId, "s", "the pin itself stays on its element");
+});
+
+test("pins: the ids a set makes, so the server can clear an old set it doesn't place", () => {
+  assert.deepEqual(pinSetIds({ id: "r", items: [{ on: "a", note: "x" }, { on: "b", note: "y" }] }), ["r-1", "r-1-k", "r-1-t", "r-2", "r-2-k", "r-2-t"]);
+  const sk = pinSkeleton({ id: "r", items: [{ on: "a", note: "x" }, { on: "b", note: "y" }] }, new Map([["a", { x: 0, y: 0, width: 10, height: 10 }], ["b", { x: 50, y: 0, width: 10, height: 10 }]]));
+  assert.deepEqual(sk.map((e) => e.id).sort(), pinSetIds({ id: "r", items: [{}, {}] }).sort());
 });

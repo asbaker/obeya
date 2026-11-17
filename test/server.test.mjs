@@ -485,7 +485,7 @@ test("a live command right after starting the server waits for tabs from its las
   tab.close();
 });
 
-test("patch: a look's medium, pins expanded by the server, and an id used twice is refused", async () => {
+test("patch: a look's medium, pins checked by the server and placed by the tab, and an id used twice is refused", async () => {
   const { port } = await start();
   const patch = (body) => raw(port, { method: "POST", path: "/api/pages/st/patch", headers: H(), body });
   const dup = await patch({ skeleton: [{ type: "rectangle", id: "a", x: 0, y: 0 }, { type: "text", id: "a", x: 0, y: 0, text: "x" }] });
@@ -493,22 +493,22 @@ test("patch: a look's medium, pins expanded by the server, and an id used twice 
   assert.match(dup.json.error.message, /"a" appears twice/);
   assert.equal((await patch({ skeleton: [], style: "tidewell" })).json.error.code, "unknown_style", "checked before any tab");
   assert.equal((await patch({ pins: { items: [{ on: "x" }] } })).json.error.code, "invalid_patch");
-  const tab = fakeTab(port, { caps: "layout" });
+  const old = fakeTab(port, { caps: "layout" });
   for (let i = 0; i < 50 && (await raw(port, { path: "/api/info" })).json.browsers !== 1; i++) await new Promise((r) => setTimeout(r, 20));
-  const ok = await patch({ style: "clean", skeleton: [{ type: "rectangle", id: "card", x: 100, y: 100, width: 200, height: 80, strokeWidth: 3 }],
-    pins: { id: "rv", items: [{ on: "card", note: "Too small" }] } });
+  const pins = { id: "rv", items: [{ on: "card", note: "Too small" }] };
+  const card = { type: "rectangle", id: "card", x: 100, y: 100, width: 200, height: 80, strokeWidth: 3 };
+  assert.equal((await patch({ skeleton: [card], pins })).json.error.code, "canvas_outdated", "a tab that can't place pins is told to reload");
+  old.close();
+  const tab = fakeTab(port, { caps: "layout,pins" });
+  for (let i = 0; i < 50 && (await raw(port, { path: "/api/info" })).json.browsers !== 1; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.match((await patch({ pins: { items: [{ on: "nope", note: "x" }] } })).json.error.message, /no element "nope"/);
+  const ok = await patch({ style: "clean", skeleton: [card], pins });
   assert.equal(ok.status, 200, ok.text);
-  const sk = tab.seen[0].skeleton;
-  const card = sk.find((e) => e.id === "card");
-  assert.deepEqual([card.roughness, card.strokeWidth], [0, 3], "the medium fills in under the element's own fields");
-  const pin = sk.find((e) => e.id === "rv-1");
-  assert.equal(pin.type, "ellipse");
-  assert.deepEqual(pin.customData, { pins: "rv", pin: 1, on: "card" });
-  assert.ok(pin.x > card.x + card.width / 2 && pin.y < card.y, "on the card's top-right corner");
-  const note = sk.find((e) => e.id === "rv-1-t");
-  assert.equal(note.text, "Too small");
-  assert.ok(note.x > card.x + card.width, "notes beside the card");
-  assert.equal(typeof pin.label.fontFamily, "number", "font names resolved");
+  const sent = tab.seen.at(-1);
+  const sk = sent.skeleton.find((e) => e.id === "card");
+  assert.deepEqual([sk.roughness, sk.strokeWidth], [0, 3], "the medium fills in under the element's own fields");
+  assert.deepEqual(sent.pins, pins, "pins go to the tab, which places them after edits and layout");
+  assert.ok(!sent.skeleton.some((e) => e.id.startsWith("rv-")));
   tab.close();
 });
 

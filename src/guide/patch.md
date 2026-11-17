@@ -55,7 +55,7 @@ Let the tool do the arithmetic: don't compute coordinates by hand. A guessed pos
 
 ## Numbered pins
 
-Review notes on a drawing, without coordinates: the server numbers them, puts each pin on its element's top-right corner and lays the notes out beside the elements (`"notes": "below"` for rows underneath).
+Review notes on a drawing, without coordinates: obeya numbers them, puts each pin on its element's top-right corner (where the patch's moves leave it) and lays the notes out beside the elements (`"notes": "below"` for rows underneath).
 
 ```json
 {"pins": {"id": "review", "items": [{"on": "card-3", "note": "Too small to read"}, {"on": "n-api", "note": "Who owns this?"}]}}

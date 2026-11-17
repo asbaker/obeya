@@ -78,7 +78,7 @@ function openStream() {
   const q = new URLSearchParams({ tab: TAB_ID });
   if (S.currentPage) q.set("page", S.currentPage);
   if (RENDERER) q.set("renderer", "1");
-  q.set("caps", "layout,mermaid,park"); // what this page's code can do; a tab opened before an upgrade lacks it
+  q.set("caps", "layout,mermaid,park,pins"); // what this page's code can do; a tab opened before an upgrade lacks it
   const events = (stream = new EventSource(`/events?${q}`));
   events.addEventListener("remote-elements", (e) => applyRemote(JSON.parse(e.data)));
   events.addEventListener("agent-patch", (e) => queuePatch(JSON.parse(e.data)));

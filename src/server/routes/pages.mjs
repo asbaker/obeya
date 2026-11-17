@@ -6,7 +6,7 @@ import { normalizePageName } from "../../lib/names.mjs";
 import { fileProblem } from "../../lib/images.mjs";
 import { applyDefaults, defaultsProblem } from "../../lib/defaults.mjs";
 import { LookError, applyLook } from "../../lib/looks.mjs";
-import { pinIds, pinSkeleton, pinsProblem } from "../../lib/pins.mjs";
+import { pinIds, pinSetIds, pinsProblem } from "../../lib/pins.mjs";
 import { lockBackdrops } from "../../lib/backdrops.mjs";
 import { resolveFonts } from "../../lib/fonts.mjs";
 
@@ -143,20 +143,13 @@ export function pageRoutes({ store, tabs, pages, waits }) {
       // Pins become skeleton: the server numbers and places them; a set sent
       // again replaces the old one.
       if (body.pins) {
-        const boxes = new Map(live.map((e) => [e.id, e]));
-        for (const e of body.skeleton ?? []) if (e.id && typeof e.x === "number") boxes.set(e.id, { width: 0, height: 0, ...e, frameId: e.frameId ?? null });
-        let made;
-        try {
-          made = pinSkeleton(body.pins, boxes);
-        } catch (err) {
-          throw new ApiError(400, "invalid_patch", err.message);
-        }
+        const known = new Set([...existing, ...(body.skeleton ?? []).map((e) => e?.id)]);
+        const unknown = body.pins.items.findIndex((it) => !known.has(it.on));
+        if (unknown >= 0) throw new ApiError(400, "invalid_patch", `pins.items[${unknown}]: no element "${body.pins.items[unknown].on}" on the page or in this patch`);
+        // Placed by the tab, after the patch's edits and layout have moved things.
+        const made = new Set(pinSetIds(body.pins));
         const old = pinIds(live, body.pins.id ?? "pins");
-        body.delete = [...(body.delete ?? []), ...old.filter((id) => !made.some((m) => m.id === id))];
-        for (const id of old) existing.delete(id);
-        resolveFonts({ skeleton: made });
-        body.skeleton = [...(body.skeleton ?? []), ...made];
-        delete body.pins;
+        body.delete = [...(body.delete ?? []), ...old.filter((id) => !made.has(id))];
       }
       if (body.defaults) {
         body.skeleton = applyDefaults(body.skeleton, body.defaults, existing);
@@ -177,7 +170,7 @@ export function pageRoutes({ store, tabs, pages, waits }) {
       const have = { ...(store.load(name).scene.files ?? {}), ...(body.files ?? {}) };
       const missing = [...(body.skeleton ?? []), ...(body.elements ?? [])].filter((e) => e.fileId && !have[e.fileId]).map((e) => e.id ?? e.fileId);
       if (missing.length) throw new ApiError(400, "invalid_patch", `image(s) without a file: ${missing.join(", ")}`);
-      const reply = await tabs.ask("agent-patch", { page: name, ...body }, { page: name, needs: body.layout?.length ? "layout" : undefined });
+      const reply = await tabs.ask("agent-patch", { page: name, ...body }, { page: name, needs: body.pins ? "pins" : body.layout?.length ? "layout" : undefined });
       const entries = store.merge(name, reply.elements, "agent");
       store.addFiles(name, body.files); // before the relay, which sends files with their images
       notePatch(name, reply.elements ?? []);

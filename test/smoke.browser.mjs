@@ -1841,6 +1841,23 @@ test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a
   r = await patch({ pins: { id: "rv", items: [{ on: "card", note: "Still small" }, { on: "fr-bg", note: "Nice" }] } });
   assert.equal(r.code, 0, r.stdout);
   await until(async () => (await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.customData?.pins === "rv" && e.customData.pin).length)) === 2, { what: "two pins" });
+  // Pins go where the same patch's layout and edits leave their elements, and can
+  // be on a new element that only layout places.
+  r = await patch({ skeleton: [{ type: "rectangle", id: "mv", x: 0, y: 600, width: 160, height: 80 }, { type: "rectangle", id: "ed", x: 300, y: 600, width: 160, height: 80 }] });
+  assert.equal(r.code, 0, r.stdout);
+  r = await patch({
+    skeleton: [{ type: "rectangle", id: "nw", width: 160, height: 80 }],
+    elements: [{ id: "ed", x: 600, y: 900 }],
+    layout: [{ grid: ["mv"], columns: 1, at: [0, 900] }, { grid: ["nw"], columns: 1, at: [300, 1100] }],
+    pins: { id: "mp", items: [{ on: "mv", note: "moved by layout" }, { on: "ed", note: "moved by an edit" }, { on: "nw", note: "placed by layout" }] },
+  });
+  assert.equal(r.code, 0, r.stdout);
+  const after = await A.evaluate(() => window.obeyaTest.elements());
+  for (const [n, on] of [[1, "mv"], [2, "ed"], [3, "nw"]]) {
+    const pin = after.find((e) => e.id === `mp-${n}`), el = after.find((e) => e.id === on);
+    const off = Math.hypot(pin.x + pin.width / 2 - (el.x + el.width), pin.y + pin.height / 2 - el.y);
+    assert.ok(off < 8, `pin ${n} on ${on}'s top-right corner (off by ${off})`);
+  }
   // Re-applying a free text's skeleton keeps its font, with or without a look.
   r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title", fontFamily: "Nunito", fontSize: 40 }] }, "--style", "clean");
   const font = (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily));

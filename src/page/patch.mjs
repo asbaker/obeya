@@ -1,6 +1,8 @@
 // Agent patches: validated, laid out, converted and applied in one undo step.
 import { computeLayout } from "/lib/layout.mjs";
 import { frameAt, outsideOf } from "/lib/geometry.mjs";
+import { pinSkeleton } from "/lib/pins.mjs";
+import { resolveFonts } from "/lib/fonts.mjs";
 import { h, createRoot, Excalidraw, convertToExcalidrawElements, restoreElements, CaptureUpdateAction } from "./deps.mjs";
 import { S, changedSinceKnown } from "./state.mjs";
 import { answer, fail, getJSON } from "./server-link.mjs";
@@ -79,7 +81,7 @@ export const queuePatch = (msg) => editorJob((hold) => handleAgentPatch(msg, hol
 
 const KEPT_ON_RESKELETON = ["groupIds", "link", "customData", "locked", "angle", "backgroundColor", "strokeColor", "fillStyle", "strokeWidth", "strokeStyle", "roughness", "opacity", "roundness"];
 
-async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], delete: del = [], toBack = [], toFront = [], layout = [], files = {} }, hold) {
+async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], delete: del = [], toBack = [], toFront = [], layout = [], pins = null, files = {} }, hold) {
   let stacks = [];
   try {
     // The same id twice in `elements` is one edit (later fields win).
@@ -146,6 +148,9 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
     // applied as positions: skeletons are shifted before the real conversion, so
     // arrows bound to them still meet them; existing elements get x/y edits.
     if (layout.length) {
+      // A new element that only layout places may come without x/y: start it at
+      // the origin, or its move is worked out from NaN.
+      for (const s of skel) if (s && !live(s.id) && s.type !== "arrow" && s.type !== "line") { s.x ??= 0; s.y ??= 0; }
       let trial = [];
       if (skel.length) {
         try {
@@ -185,6 +190,30 @@ async function handleAgentPatch({ reqId, page, elements = [], skeleton = [], del
       for (const [id, f] of plan.frameOf) if (!bySkel.has(id)) edit(id).frameId = f;
       toFront = [...toFront, ...plan.front];
       stacks = plan.stacks;
+    }
+
+    // Pins go where the edits and layout above leave their elements, so they're
+    // placed here and not by the server, which never sees those positions.
+    if (pins) {
+      let trial = [];
+      if (skel.length) {
+        try {
+          trial = convertToExcalidrawElements(structuredClone(skel), { regenerateIds: false });
+        } catch (err) {
+          return fail(reqId, "invalid_patch", `skeleton: ${err?.message || err}`);
+        }
+      }
+      const boxes = new Map(scene.filter((e) => !e.isDeleted).map((e) => [e.id, e]));
+      for (const p of elements) if (boxes.has(p.id)) boxes.set(p.id, { ...boxes.get(p.id), ...p });
+      for (const e of trial) boxes.set(e.id, { ...e, frameId: e.frameId ?? null });
+      let made;
+      try {
+        made = pinSkeleton(pins, boxes);
+      } catch (err) {
+        return fail(reqId, "invalid_patch", err.message);
+      }
+      resolveFonts({ skeleton: made });
+      skel.push(...made);
     }
 
     if (skel.length) {

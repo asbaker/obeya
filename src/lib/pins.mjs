@@ -1,8 +1,8 @@
 // Numbered pins: review notes in one patch key. The agent says what each pin
-// is on and what it says; the server numbers them, puts each circle on its
-// element's top-right corner and lays the notes out beside the elements, so
-// the agent writes no coordinates. Re-sending the same `id` replaces the set
-// (renumbering after a pin is dropped). Pure: no Node built-ins.
+// is on and what it says; the canvas tab numbers them, puts each circle on its
+// element's top-right corner and lays the notes out beside the elements, after
+// the patch's edits and layout, so the agent writes no coordinates. Re-sending
+// the same `id` replaces the set. Pure: the canvas page loads it from /lib/.
 //
 //   {"pins": {"id": "review", "items": [{"on": "card-3", "note": "Too small"}],
 //             "notes": "right", "color": "#db2777", "size": 24}}
@@ -34,6 +34,12 @@ export function pinsProblem(p) {
 /** Ids of the elements a previous run of this pin set made (to delete before redrawing). */
 export function pinIds(elements, set) {
   return elements.filter((e) => !e.isDeleted && !e.containerId && e.customData?.pins === set).map((e) => e.id);
+}
+
+/** Ids a pin set makes: each pin, its key circle and its note. */
+export function pinSetIds(p) {
+  const set = p.id ?? "pins";
+  return p.items.flatMap((_, i) => [`${set}-${i + 1}`, `${set}-${i + 1}-k`, `${set}-${i + 1}-t`]);
 }
 
 /**
