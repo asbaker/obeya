@@ -137,7 +137,6 @@ export async function search(env, query, limit) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // The cache: <cache>/libraries/<id>.excalidrawlib + <id>.meta.json
 
 const metaFile = (env, id) => path.join(libDir(env), `${id}.meta.json`);

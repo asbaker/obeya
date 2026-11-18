@@ -1,5 +1,4 @@
-// The page's arrow binding (src/page/arrows.mjs), unit-tested in Node since the
-// page moved to ES modules.
+// The page's arrow binding (src/page/arrows.mjs), unit-tested in Node.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bindArrow, splitArrowBindings } from "../src/page/arrows.mjs";

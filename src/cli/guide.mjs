@@ -1,6 +1,3 @@
-// The guide `obeya --skill` prints, from src/guide/: core.md (always), and one
-// file per topic (`obeya --skill <topic>`), listed in the core's last section.
-// `obeya --skill all` prints the core and every topic.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,10 +5,11 @@ import { fileURLToPath } from "node:url";
 export const GUIDE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "guide");
 const read = (name) => fs.readFileSync(path.join(GUIDE_DIR, `${name}.md`), "utf8").trimEnd();
 
-/** Topic names, in the order the core's index lists them (lines "- `name`: …" under "## Topics"). */
+/** Topic names, in the order the core's index lists them (lines "- `name`: …" or "- `a`, `b`: …" under "## Topics"). */
 export function topics() {
   const index = read("core").split(/^## Topics.*$/m)[1] ?? "";
-  return [...index.matchAll(/^- `([a-z-]+)`:/gm)].map((m) => m[1]);
+  // A line may name several: "- `sketch`, `clean`, `hifi`: …".
+  return [...index.matchAll(/^- ((?:`[a-z-]+`(?:, )?)+):/gm)].flatMap((m) => [...m[1].matchAll(/`([a-z-]+)`/g)].map((n) => n[1]));
 }
 
 /** The core, one topic, or all of it; null for an unknown topic. */

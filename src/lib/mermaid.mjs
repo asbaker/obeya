@@ -28,9 +28,6 @@ export function extent(elements) {
 /**
  * Where a diagram goes when --at doesn't say: where the earlier run was, else
  * inside --frame, else below everything on the page, else the origin.
- * @param {any[]} pageElements  the page's elements
- * @param {{prefix: string, frame?: string|null}} opts
- * @returns {{at: [number, number], frame: string|null}}
  */
 export function placement(pageElements, { prefix, frame = null }) {
   const live = pageElements.filter((e) => !e.isDeleted);
@@ -52,9 +49,6 @@ export function placement(pageElements, { prefix, frame = null }) {
  * them), unnamed elements numbered, one group for the whole diagram (the
  * converter's own groups inside it), moved so its top-left is at `at`, and in
  * `frame` when given.
- * @param {{elements: any[], files?: Record<string, any>}} converted
- * @param {{prefix: string, at: [number, number], frame?: string|null}} opts
- * @returns {{skeleton: any[], files: Record<string, any>, image: boolean}}
  */
 export function mermaidPatch(converted, { prefix, at, frame = null }) {
   const els = converted.elements ?? [];

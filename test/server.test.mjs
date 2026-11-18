@@ -106,6 +106,10 @@ test("errors: unknown page, bad JSON, bad patch, no canvas", async () => {
   assert.equal((await raw(port, { method: "POST", path: "/api/pages/b/sync", headers: H(), body: "{not json" })).json.error.code, "invalid_json");
   assert.equal((await raw(port, { method: "POST", path: "/api/pages/b/patch", headers: H(), body: { skeleton: {} } })).json.error.code, "invalid_patch");
   assert.equal((await raw(port, { method: "POST", path: "/api/pages/b/patch", headers: H(), body: { elements: [] } })).json.error.code, "no_canvas_open");
+  // A font name that doesn't exist is refused before a tab is asked; the message lists the names.
+  const font = (await raw(port, { method: "POST", path: "/api/pages/b/patch", headers: H(), body: { skeleton: [{ type: "text", id: "t", x: 0, y: 0, text: "x", fontFamily: "Comic Sans" }] } })).json.error;
+  assert.equal(font.code, "invalid_patch");
+  assert.match(font.message, /unknown font "Comic Sans".*Inter/);
   assert.equal((await raw(port, { path: "/api/pages/..%2Fx", headers: H() })).json.error.code, "bad_page_name");
 });
 
@@ -231,7 +235,7 @@ test("a tab on page code from before an upgrade can't take a layout patch: canva
 
 test("the page's modules and shared lib modules are served (fixed shapes, an allowlist); lib modules import only each other", async () => {
   const { port } = await start();
-  const served = ["layout", "geometry", "merge", "names", "machine", "page-machines"];
+  const served = ["layout", "geometry", "merge", "names", "machine", "page-machines", "fonts", "docs", "docmerge", "docsync"];
   for (const m of served) {
     const r = await raw(port, { path: `/lib/${m}.mjs` });
     assert.equal(r.status, 200, m);
@@ -260,6 +264,13 @@ test("the page's modules and shared lib modules are served (fixed shapes, an all
   const deps = (await raw(port, { path: "/page/deps.mjs" })).text;
   const pinned = /@excalidraw\/excalidraw@([^?"]+)\?/.exec(deps)[1];
   assert.match(deps, new RegExp(`EXCALIDRAW_VERSION = "${pinned.replace(/[.]/g, "\\.")}"`));
+  // The fonts obeya ships, by a fixed shape of name.
+  const font = await raw(port, { path: "/page/fonts/inter.woff2" });
+  assert.equal(font.status, 200);
+  assert.equal(font.headers["content-type"], "font/woff2");
+  for (const p of ["/page/fonts/nope.woff2", "/page/fonts/Inter.woff2", "/page/fonts/..%2F..%2Fpackage.woff2", "/page/fonts/OFL-inter.txt"]) {
+    assert.equal((await raw(port, { path: p })).status, 404, p);
+  }
   for (const p of ["/lib/args.mjs", "/lib/store.mjs", "/lib/..%2Fserver.mjs", "/lib/Layout.mjs", "/src/lib/layout.mjs",
     "/page/index.html", "/page/nope.mjs", "/page/..%2Fserver%2Fmain.mjs", "/page/Main.mjs", "/page/ui/x/y.mjs"]) {
     assert.equal((await raw(port, { path: p })).status, 404, p);
@@ -472,4 +483,103 @@ test("a live command right after starting the server waits for tabs from its las
   assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
   assert.equal(tab?.seen.length, 1, "the reconnected tab applied the patch");
   tab.close();
+});
+
+test("patch: a look's medium, pins checked by the server and placed by the tab, and an id used twice is refused", async () => {
+  const { port } = await start();
+  const patch = (body) => raw(port, { method: "POST", path: "/api/pages/st/patch", headers: H(), body });
+  const dup = await patch({ skeleton: [{ type: "rectangle", id: "a", x: 0, y: 0 }, { type: "text", id: "a", x: 0, y: 0, text: "x" }] });
+  assert.equal(dup.json.error.code, "invalid_patch");
+  assert.match(dup.json.error.message, /"a" appears twice/);
+  assert.equal((await patch({ skeleton: [], style: "tidewell" })).json.error.code, "unknown_style", "checked before any tab");
+  assert.equal((await patch({ pins: { items: [{ on: "x" }] } })).json.error.code, "invalid_patch");
+  const old = fakeTab(port, { caps: "layout" });
+  for (let i = 0; i < 50 && (await raw(port, { path: "/api/info" })).json.browsers !== 1; i++) await new Promise((r) => setTimeout(r, 20));
+  const pins = { id: "rv", items: [{ on: "card", note: "Too small" }] };
+  const card = { type: "rectangle", id: "card", x: 100, y: 100, width: 200, height: 80, strokeWidth: 3 };
+  assert.equal((await patch({ skeleton: [card], pins })).json.error.code, "canvas_outdated", "a tab that can't place pins is told to reload");
+  old.close();
+  const tab = fakeTab(port, { caps: "layout,pins" });
+  for (let i = 0; i < 50 && (await raw(port, { path: "/api/info" })).json.browsers !== 1; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.match((await patch({ pins: { items: [{ on: "nope", note: "x" }] } })).json.error.message, /no element "nope"/);
+  const ok = await patch({ style: "clean", skeleton: [card], pins });
+  assert.equal(ok.status, 200, ok.text);
+  const sent = tab.seen.at(-1);
+  const sk = sent.skeleton.find((e) => e.id === "card");
+  assert.deepEqual([sk.roughness, sk.strokeWidth], [0, 3], "the medium fills in under the element's own fields");
+  assert.deepEqual(sent.pins, pins, "pins go to the tab, which places them after edits and layout");
+  assert.ok(!sent.skeleton.some((e) => e.id.startsWith("rv-")));
+  tab.close();
+});
+
+test("docs: .md files are listed beside pages and served read-only; nothing outside the folder", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "v0.3"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "v0.3", "spec.md"), "# Spec\n\n## 3 Requirements\n");
+  const list = (await raw(port, { path: "/api/pages" })).json;
+  assert.deepEqual(list.docs.map((d) => d.name), ["v0.3/spec.md"]);
+  const doc = await raw(port, { path: `/api/docs/${encodeURIComponent("v0.3/spec.md")}` });
+  assert.equal(doc.json.text, "# Spec\n\n## 3 Requirements\n");
+  for (const bad of ["../secret.md", "v0.3/spec", ".obeya/x.md", "nope.md"]) {
+    assert.equal((await raw(port, { path: `/api/docs/${encodeURIComponent(bad)}` })).status, 404, bad);
+  }
+});
+
+test("docs: rename and move a doc (links that name it are listed), delete one to the trash", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes", "a.md"), "# A\n");
+  fs.writeFileSync(path.join(dir, "notes", "b.md"), "# B\n");
+  const post = (p, body) => raw(port, { method: "POST", path: p, headers: H(), body });
+  let r = await post(`/api/pages/${encodeURIComponent("notes/a.md")}/rename`, { to: "archive/old-a" });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.to, "archive/old-a.md", ".md is kept");
+  assert.ok(fs.existsSync(path.join(dir, "archive", "old-a.md")));
+  assert.ok(!fs.existsSync(path.join(dir, "notes", "a.md")));
+  assert.deepEqual(r.json.staleLinks, []);
+  r = await post(`/api/pages/${encodeURIComponent("notes/b.md")}/rename`, { to: "archive/old-a.md" });
+  assert.equal(r.json.error.code, "page_exists");
+  r = await raw(port, { method: "DELETE", path: `/api/pages/${encodeURIComponent("notes/b.md")}`, headers: H() });
+  assert.equal(r.status, 200, r.text);
+  assert.ok(!fs.existsSync(path.join(dir, "notes")), "the emptied folder is pruned");
+  const trashed = fs.readdirSync(path.join(dir, ".obeya", ".trash"), { recursive: true }).map(String);
+  assert.ok(trashed.some((f) => f.endsWith(path.join("notes", "b.md"))), trashed.join(", "));
+});
+
+test("docs: the tab saves a doc only over the text it started from; 409 doc_changed carries the file's text", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR, file = path.join(dir, "notes.md");
+  fs.writeFileSync(file, "# Notes\n\nfirst\n");
+  const save = (body) => raw(port, { method: "POST", path: `/api/docs/${encodeURIComponent("notes.md")}`, headers: H(), body });
+  let r = await save({ base: "# Notes\n\nfirst\n", text: "# Notes\n\nfirst\nsecond\n" });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(fs.readFileSync(file, "utf8"), "# Notes\n\nfirst\nsecond\n");
+  fs.writeFileSync(file, "# Notes\r\n\r\nthe agent's\r\n"); // the agent wrote it meanwhile (CRLF kept as is)
+  r = await save({ base: "# Notes\n\nfirst\nsecond\n", text: "mine" });
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error.code, "doc_changed");
+  assert.equal(r.json.error.text, "# Notes\r\n\r\nthe agent's\r\n");
+  assert.equal(fs.readFileSync(file, "utf8"), "# Notes\r\n\r\nthe agent's\r\n", "nothing written");
+  assert.equal((await save({ base: "x" })).json.error.code, "invalid_json");
+  for (const bad of ["../out.md", "nope.md", ".obeya/x.md"]) {
+    r = await raw(port, { method: "POST", path: `/api/docs/${encodeURIComponent(bad)}`, headers: H(), body: { base: "", text: "x" } });
+    assert.ok([400, 404].includes(r.status), `${bad}: ${r.status}`);
+  }
+  assert.ok(!fs.existsSync(path.join(dir, "..", "out.md")));
+});
+
+test("docs: New page with a .md name makes a doc titled by its name; a second time is page_exists", async () => {
+  const { port, env } = await start();
+  const dir = env.OBEYA_DIR;
+  const make = (n) => raw(port, { method: "POST", path: `/api/pages/${encodeURIComponent(n)}`, headers: H(), body: {} });
+  let r = await make("v0.3/release-notes.md");
+  assert.equal(r.status, 201, r.text);
+  assert.equal(fs.readFileSync(path.join(dir, "v0.3", "release-notes.md"), "utf8"), "# release-notes\n\n");
+  assert.ok((await raw(port, { path: "/api/pages" })).json.docs.some((d) => d.name === "v0.3/release-notes.md"));
+  r = await make("v0.3/release-notes.md");
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error.code, "page_exists");
+  assert.equal((await make("bad:name.md")).status, 400);
 });

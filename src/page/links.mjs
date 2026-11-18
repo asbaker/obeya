@@ -1,5 +1,3 @@
-// Element links: following them (and, while presenting, by area), and the
-// links Excalidraw's "copy link to object" makes.
 import { S } from "./state.mjs";
 import { goTo, openPage } from "./pages.mjs";
 import { presenting } from "./present.mjs";
@@ -14,14 +12,9 @@ export function isCanvasLink(link) {
   }
 }
 
-// --- element links (navigation, and presenting) -------------------------------------
-// Link formats handled:
-//   …?element=<id>              -> element or frame on the current page
-//   …?page=<p>&element=<id>     -> element or frame on another page
-// Any other URL is an ordinary web link, left to Excalidraw.
-// Canvas links: Excalidraw's own "copy link to object" format, which we
-// generate as <origin>/?page=<page>&element=<id> (see generateLinkForSelection),
-// relative "?element=<id>", and links made while the server ran on another port.
+// Canvas links: ?element=<id> (this page) or ?page=<p>&element=<id>, absolute,
+// relative, or made while the server ran on another port. Any other URL is a
+// web link, left to Excalidraw.
 const isCanvasHost = (url) => url.origin === location.origin || ((url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.protocol === "http:");
 export function linkForSelection(id) {
   const u = new URL(location.origin + "/");
@@ -42,7 +35,8 @@ export function onLinkOpen(element, event) {
   event.preventDefault();
   // Hidden elements still receive clicks; only links inside the shown frame count.
   if (presenting() && S.focusedFrame && element.frameId !== S.focusedFrame && element.id !== S.focusedFrame) return;
-  if (page && page !== S.currentPage) openPage(page).then(() => goTo(target, { lock: presenting() }));
+  if (page && page.endsWith(".md")) openPage(page, null, { heading: url.hash ? decodeURIComponent(url.hash.slice(1)) : undefined });
+  else if (page && page !== S.currentPage) openPage(page).then(() => goTo(target, { lock: presenting() }));
   else goTo(target, { lock: presenting() });
 }
 

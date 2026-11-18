@@ -5,8 +5,6 @@
 // covers every write.
 
 /**
- * @param {{method: string, pathname: string, headers: Record<string, string|undefined>}} req
- * @param {{port: number}} opts
  * @returns {null | {status: number, code: string, message: string}}
  */
 export function checkRequest(req, { port }) {

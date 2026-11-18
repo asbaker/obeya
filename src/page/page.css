@@ -1,4 +1,3 @@
-/* The canvas page's own controls, inside and over Excalidraw's UI. */
 html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
 #canvas { height: 100%; }
 /* Our controls inside Excalidraw's top corners (renderTopLeftUI / renderTopRightUI). */
@@ -24,73 +23,88 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif;
 .xl-tip b { display: flex; justify-content: space-between; margin-bottom: 4px; }
 .xl-tip kbd { font: 12px ui-monospace, Menlo, monospace; color: #ced4da; }
 .xl-tipwrap:hover .xl-tip, .xl-tipwrap:focus-within .xl-tip { display: block; }
-/* Page picker and rename dialog: our own modals over the editor. */
-.xl-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(30,30,30,.35); display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; }
-.xl-modal { width: min(640px, 92vw); max-height: 76vh; display: flex; flex-direction: column; background: #fff; color: #1e1e1e; border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0,0,0,.25); font: 14px system-ui, sans-serif; overflow: hidden; }
+/* Page picker and rename dialog: our own modals over the editor. They sit outside
+   Excalidraw's themed container, so their colours are variables here, with a dark
+   set that follows the editor's theme. */
+.xl-backdrop { --xm-bg: #fff; --xm-fg: #1e1e1e; --xm-soft: #495057; --xm-muted: #868e96; --xm-faint: #adb5bd;
+  --xm-line: #ced4da; --xm-line-soft: #dee2e6; --xm-rule: #f1f3f5; --xm-rule-strong: #e9ecef; --xm-field: #fff; --xm-chip: #f8f9fa;
+  --xm-hl: #f1f0ff; --xm-accent: #6965db; --xm-primary: #6965db; --xm-err: #c92a2a; --xm-err-bg: #fff5f5; --xm-danger: #e03131;
+  --xm-shade: rgba(30,30,30,.35); --xm-shadow: 0 12px 40px rgba(0,0,0,.25); }
+body:has(.excalidraw.theme--dark) .xl-backdrop { --xm-bg: #232329; --xm-fg: #e3e3e8; --xm-soft: #c1c2c5; --xm-muted: #8b929a; --xm-faint: #5c5f66;
+  --xm-line: #3d3d45; --xm-line-soft: #34343b; --xm-rule: #2e2e33; --xm-rule-strong: #34343b; --xm-field: #1c1c20; --xm-chip: #2b2b31;
+  --xm-hl: #2b2a4a; --xm-accent: #a8a5ff; --xm-primary: #6965db; --xm-err: #ff8787; --xm-err-bg: #3b1f22; --xm-danger: #ff6b6b;
+  --xm-shade: rgba(0,0,0,.55); --xm-shadow: 0 12px 40px rgba(0,0,0,.6); color-scheme: dark; }
+.xl-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--xm-shade); display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; }
+.xl-modal { width: min(640px, 92vw); max-height: 76vh; display: flex; flex-direction: column; background: var(--xm-bg); color: var(--xm-fg); border-radius: 12px;
+  box-shadow: var(--xm-shadow); font: 14px system-ui, sans-serif; overflow: hidden; }
 .xl-modal header { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 20px 8px; }
 .xl-modal h2 { margin: 0; font-size: 18px; }
-.xl-modal > input { margin: 0 20px 10px; padding: 10px 12px; font: inherit; border: 1px solid #ced4da; border-radius: 8px; outline: none; }
-.xl-field input { padding: 10px 12px; font: inherit; font-size: 15px; color: #1e1e1e; border: 1px solid #ced4da; border-radius: 8px; outline: none; }
-.xl-modal > input:focus, .xl-field input:focus, .xl-field select:focus { border-color: #6965db; box-shadow: 0 0 0 3px rgba(105,101,219,.15); outline: none; }
+.xl-modal > input { margin: 0 20px 10px; padding: 10px 12px; font: inherit; color: var(--xm-fg); background: var(--xm-field); border: 1px solid var(--xm-line); border-radius: 8px; outline: none; }
+.xl-field input { padding: 10px 12px; font: inherit; font-size: 15px; color: var(--xm-fg); background: var(--xm-field); border: 1px solid var(--xm-line); border-radius: 8px; outline: none; }
+.xl-modal > input:focus, .xl-field input:focus, .xl-field select:focus { border-color: var(--xm-accent); box-shadow: 0 0 0 3px rgba(105,101,219,.25); outline: none; }
 .xl-list { overflow-y: auto; padding: 0 12px 8px; }
-.xl-section { margin: 10px 8px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #868e96; }
+.xl-section { margin: 10px 8px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--xm-muted); }
 .xl-recent { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
-.xl-recent a { border: 1px solid #dee2e6; background: #f8f9fa; border-radius: 16px; padding: 4px 12px; font: inherit; cursor: pointer; color: inherit; text-decoration: none; }
-.xl-recent a:hover { background: #f1f0ff; border-color: #6965db; }
+.xl-recent a { border: 1px solid var(--xm-line-soft); background: var(--xm-chip); border-radius: 16px; padding: 4px 12px; font: inherit; cursor: pointer; color: inherit; text-decoration: none; }
+.xl-recent a:hover { background: var(--xm-hl); border-color: var(--xm-accent); }
 a.xl-row { color: inherit; text-decoration: none; }
 .xl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
-.xl-row.hl { background: #f1f0ff; }
-.xl-row .meta { color: #868e96; font-size: 12px; white-space: nowrap; }
-.xl-row .here { color: #6965db; font-size: 12px; margin-left: 8px; }
-.xl-row.skipped { cursor: default; color: #adb5bd; }
-.xl-hint { padding: 6px 10px; color: #c92a2a; font-size: 13px; }
-.xl-modal footer { display: flex; justify-content: space-between; gap: 12px; padding: 10px 20px; border-top: 1px solid #f1f3f5; color: #868e96; font-size: 12px; }
-.xl-modal footer button, .xl-modal header button.xl-new { border: 1px solid #ced4da; background: #fff; border-radius: 6px; padding: 6px 14px; font: inherit; cursor: pointer; }
+.xl-row.hl { background: var(--xm-hl); }
+.xl-row .meta { color: var(--xm-muted); font-size: 12px; white-space: nowrap; }
+/* A row's kind: drawing or doc, a quiet glyph before the name. */
+.xl-named { display: inline-flex; align-items: center; min-width: 0; }
+.xl-kind { flex: none; width: 18px; height: 18px; margin-right: 10px; fill: none; stroke: var(--xm-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.xl-row.hl .xl-kind { stroke: var(--xm-accent); }
+.xl-recent a .xl-kind { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
+.xl-row .here { color: var(--xm-accent); font-size: 12px; margin-left: 8px; }
+.xl-row.skipped { cursor: default; color: var(--xm-faint); }
+.xl-hint { padding: 6px 10px; color: var(--xm-err); font-size: 13px; }
+.xl-modal footer { display: flex; justify-content: space-between; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--xm-rule); color: var(--xm-muted); font-size: 12px; }
+.xl-modal footer button, .xl-modal header button.xl-new { border: 1px solid var(--xm-line); background: var(--xm-field); color: var(--xm-fg); border-radius: 6px; padding: 6px 14px; font: inherit; cursor: pointer; }
 .xl-modal header button.xl-new { padding: 3px 10px; margin-left: 8px; }
-.xl-modal header button.xl-new:hover { background: #f1f0ff; border-color: #6965db; }
-.xl-modal footer button.primary { background: #6965db; border-color: #6965db; color: #fff; }
+.xl-modal header button.xl-new:hover { background: var(--xm-hl); border-color: var(--xm-accent); }
+.xl-modal footer button.primary { background: var(--xm-primary); border-color: var(--xm-primary); color: #fff; }
 /* Export dialog */
 .xl-export { width: min(1000px, 94vw); max-height: 90vh; }
-.xl-export .body { display: grid; grid-template-columns: 290px 1fr 210px; min-height: 0; overflow: auto; border-top: 1px solid #f1f3f5; }
-.xl-export .col { padding: 14px 20px 18px; border-right: 1px solid #f1f3f5; min-width: 0; }
+.xl-export .body { display: grid; grid-template-columns: 290px 1fr 210px; min-height: 0; overflow: auto; border-top: 1px solid var(--xm-rule); }
+.xl-export .col { padding: 14px 20px 18px; border-right: 1px solid var(--xm-rule); min-width: 0; }
 .xl-export .col:last-child { border-right: 0; }
 .xl-export .what { display: flex; align-items: center; gap: 16px; padding: 4px 20px 14px; }
-.xl-export .muted { color: #868e96; font-size: 13px; }
-.xl-seg { display: inline-flex; border: 1px solid #ced4da; border-radius: 8px; overflow: hidden; }
-.xl-seg button { border: 0; border-right: 1px solid #ced4da; background: #fff; padding: 7px 16px; font: inherit; cursor: pointer; }
+.xl-export .muted { color: var(--xm-muted); font-size: 13px; }
+.xl-seg { display: inline-flex; border: 1px solid var(--xm-line); border-radius: 8px; overflow: hidden; }
+.xl-seg button { border: 0; border-right: 1px solid var(--xm-line); background: var(--xm-field); color: var(--xm-fg); padding: 7px 16px; font: inherit; cursor: pointer; }
 .xl-seg button:last-child { border-right: 0; }
-.xl-seg button.on { background: #6965db; color: #fff; }
-.xl-seg button:disabled { color: #adb5bd; cursor: default; }
+.xl-seg button.on { background: var(--xm-primary); color: #fff; }
+.xl-seg button:disabled { color: var(--xm-faint); cursor: default; }
 .xl-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.xl-tile { text-align: left; border: 1px solid #dee2e6; border-radius: 10px; background: #fff; padding: 10px 12px; font: inherit; cursor: pointer; }
+.xl-tile { text-align: left; border: 1px solid var(--xm-line-soft); border-radius: 10px; background: var(--xm-field); color: var(--xm-fg); padding: 10px 12px; font: inherit; cursor: pointer; }
 .xl-tile b { display: block; font-size: 15px; }
-.xl-tile span { color: #868e96; font-size: 12px; }
-.xl-tile.on { border: 2px solid #6965db; background: #f1f0ff; padding: 9px 11px; }
-.xl-tile.off span { color: #c92a2a; }
-.xl-tile:disabled { cursor: default; color: #adb5bd; }
+.xl-tile span { color: var(--xm-muted); font-size: 12px; }
+.xl-tile.on { border: 2px solid var(--xm-accent); background: var(--xm-hl); padding: 9px 11px; }
+.xl-tile.off span { color: var(--xm-err); }
+.xl-tile:disabled { cursor: default; color: var(--xm-faint); }
 .xl-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; }
-.xl-opt input[type=number] { width: 72px; padding: 5px 8px; font: inherit; border: 1px solid #ced4da; border-radius: 6px; }
-.xl-opt input[type=text], .xl-filename input { padding: 6px 10px; font: inherit; border: 1px solid #ced4da; border-radius: 6px; min-width: 0; }
+.xl-opt input[type=number] { width: 72px; padding: 5px 8px; font: inherit; color: var(--xm-fg); background: var(--xm-field); border: 1px solid var(--xm-line); border-radius: 6px; }
+.xl-opt input[type=text], .xl-filename input { padding: 6px 10px; font: inherit; color: var(--xm-fg); background: var(--xm-field); border: 1px solid var(--xm-line); border-radius: 6px; min-width: 0; }
 .xl-switch { position: relative; width: 38px; height: 22px; flex: none; }
 .xl-switch input { opacity: 0; width: 0; height: 0; }
-.xl-switch span { position: absolute; inset: 0; background: #ced4da; border-radius: 11px; cursor: pointer; transition: background .15s; }
+.xl-switch span { position: absolute; inset: 0; background: var(--xm-line); border-radius: 11px; cursor: pointer; transition: background .15s; }
 .xl-switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
-.xl-switch input:checked + span { background: #6965db; }
+.xl-switch input:checked + span { background: var(--xm-primary); }
 .xl-switch input:checked + span::after { transform: translateX(16px); }
-.xl-framerow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 4px 0; border: 1px solid #e9ecef; border-radius: 8px; background: #fff; }
+.xl-framerow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 4px 0; border: 1px solid var(--xm-rule-strong); border-radius: 8px; background: var(--xm-field); }
 .xl-framerow.drag { opacity: .4; }
 .xl-framerow label { flex: 1; display: flex; gap: 8px; align-items: center; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.xl-framerow .grip { cursor: grab; color: #adb5bd; padding: 0 4px; user-select: none; }
-.xl-slide { border: 1px solid #e9ecef; background: #f8f9fa; border-radius: 8px; padding: 14px 8px; margin: 0 0 8px; text-align: center; font-size: 12px; color: #495057; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.xl-slide.title { background: #f1f0ff; }
+.xl-framerow .grip { cursor: grab; color: var(--xm-faint); padding: 0 4px; user-select: none; }
+.xl-slide { border: 1px solid var(--xm-rule-strong); background: var(--xm-chip); border-radius: 8px; padding: 14px 8px; margin: 0 0 8px; text-align: center; font-size: 12px; color: var(--xm-soft); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.xl-slide.title { background: var(--xm-hl); }
 .xl-export footer { align-items: center; }
-.xl-filename { display: flex; align-items: center; gap: 6px; color: #1e1e1e; font-size: 14px; }
-.xl-link { border: 0; background: none; color: #6965db; font: inherit; cursor: pointer; padding: 0; }
-.xl-error { margin: 0 20px 10px; padding: 8px 12px; border-radius: 8px; background: #fff5f5; color: #c92a2a; font-size: 13px; }
+.xl-filename { display: flex; align-items: center; gap: 6px; color: var(--xm-fg); font-size: 14px; }
+.xl-link { border: 0; background: none; color: var(--xm-accent); font: inherit; cursor: pointer; padding: 0; }
+.xl-error { margin: 0 20px 10px; padding: 8px 12px; border-radius: 8px; background: var(--xm-err-bg); color: var(--xm-err); font-size: 13px; }
 .xl-progress { padding: 60px 40px; text-align: center; }
-.xl-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; margin: 16px auto; max-width: 420px; }
-.xl-bar::after { content: ""; display: block; height: 100%; width: 40%; background: #6965db; border-radius: 4px; animation: xl-slide 1.1s ease-in-out infinite; }
+.xl-bar { height: 8px; border-radius: 4px; background: var(--xm-rule-strong); overflow: hidden; margin: 16px auto; max-width: 420px; }
+.xl-bar::after { content: ""; display: block; height: 100%; width: 40%; background: var(--xm-primary); border-radius: 4px; animation: xl-slide 1.1s ease-in-out infinite; }
 @keyframes xl-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 /* Controls while presenting: they fade when the mouse rests. */
 .xl-presenting { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 4px;
@@ -104,14 +118,35 @@ a.xl-row { color: inherit; text-decoration: none; }
 #notice.on { display: flex; }
 #notice code { background: #eee; padding: 2px 6px; border-radius: 4px; }
 /* About obeya */
-.xl-about { width: min(460px, 92vw); }
+.xl-about { width: min(500px, 92vw); }
 .xl-lockup { display: block; width: 220px; margin: 28px auto 6px; }
-.xl-tagline { margin: 0 0 14px; text-align: center; color: #495057; }
+.xl-tagline { margin: 0 0 14px; text-align: center; color: var(--xm-soft); }
 .xl-about dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 28px 18px; font-size: 13px; }
-.xl-about dt { color: #868e96; }
+.xl-about dt { color: var(--xm-muted); }
 .xl-about dd { margin: 0; overflow-wrap: anywhere; }
-.xl-about code { font: 12px ui-monospace, Menlo, monospace; background: #f1f3f5; padding: 1px 5px; border-radius: 4px; }
+.xl-about code { font: 12px ui-monospace, Menlo, monospace; background: var(--xm-rule); padding: 1px 5px; border-radius: 4px; }
 .xl-about footer { align-items: center; }
+/* A newer obeya is out: the news box in About, a chip on its menu item, a dot on ☰. */
+.xl-news { margin: 0 28px 16px; padding: 14px 18px 16px; border-radius: 10px; background: var(--xm-hl); }
+.xl-news-top { display: flex; justify-content: space-between; align-items: baseline; }
+.xl-news-eyebrow { font: 11px ui-monospace, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--xm-accent); }
+.xl-news-link { font-size: 12px; font-weight: 600; color: var(--xm-accent); text-decoration: none; }
+.xl-news-link:hover { text-decoration: underline; }
+.xl-news h3 { margin: 4px 0 2px; font-size: 18px; }
+.xl-news-head { margin: 0 0 10px; }
+.xl-news-how { margin: 0 0 6px; font-size: 12px; color: var(--xm-soft); }
+.xl-news-cmd { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border: 1px solid var(--xm-line); border-radius: 8px; background: var(--xm-field); }
+.xl-about .xl-news-cmd code { flex: 1; min-width: 0; font: 11px ui-monospace, Menlo, monospace; white-space: nowrap; overflow-x: auto; background: none; padding: 0; }
+.xl-news-cmd button { flex: none; border: 1px solid var(--xm-line); background: var(--xm-bg); color: var(--xm-fg); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.xl-about-item { display: inline-flex; align-items: center; gap: 8px; }
+.xl-news-chip { padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #f1f0ff; color: #6965db; }
+.excalidraw.theme--dark .xl-news-chip { background: #2b2a4a; color: #a8a5ff; }
+body.xl-has-news .main-menu-trigger { position: relative; overflow: visible; }
+body.xl-has-news .main-menu-trigger::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%;
+  background: #6965db; box-shadow: 0 0 0 2px var(--island-bg-color, #fff); }
+body.xl-has-news .excalidraw.theme--dark .main-menu-trigger::after { background: #a8a5ff; }
+/* The lockup is an image with a dark wordmark: on a dark modal, the filter Excalidraw puts on a dark canvas. */
+body:has(.excalidraw.theme--dark) .xl-lockup { filter: invert(93%) hue-rotate(180deg); }
 
 /* The welcome screen on an empty page: our logo and wordmark in Excalidraw's own layout. */
 .xl-welcome-logo { display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: Excalifont, Virgil, sans-serif; font-size: 44px; color: var(--color-on-surface, #1e1e1e); }
@@ -123,18 +158,18 @@ a.xl-row { color: inherit; text-decoration: none; }
 /* New page and Rename or move: labelled fields, the folder list. */
 .xl-fields { display: flex; flex-direction: column; gap: 12px; padding: 4px 20px 14px; }
 .xl-fields p { margin: 0; line-height: 1.45; }
-.xl-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: #495057; }
+.xl-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--xm-soft); }
 .xl-modal .xl-field input, .xl-modal .xl-field select { margin: 0; width: 100%; box-sizing: border-box; }
-.xl-field select { font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid #ced4da; border-radius: 8px; background: #fff; color: #1e1e1e; }
-.xl-modal footer button.danger { background: #e03131; border-color: #e03131; color: #fff; }
-.xl-modal footer button.xl-delete { border: 0; background: none; color: #e03131; padding-left: 0; }
+.xl-field select { font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--xm-line); border-radius: 8px; background: var(--xm-field); color: var(--xm-fg); }
+.xl-modal footer button.danger { background: var(--xm-danger); border-color: var(--xm-danger); color: #fff; }
+.xl-modal footer button.xl-delete { border: 0; background: none; color: var(--xm-danger); padding-left: 0; }
 .xl-modal footer button.xl-delete:hover { text-decoration: underline; }
 /* The picker: folder headings with "+ page here" on hover; matches show their folder. */
 .xl-folder { display: flex; justify-content: space-between; align-items: center; }
 .xl-folder .xl-here { visibility: hidden; font-size: 12px; text-transform: none; letter-spacing: 0; }
 .xl-folder:hover .xl-here, .xl-folder .xl-here:focus { visibility: visible; }
 .xl-row.indent { padding-left: 26px; }
-.xl-in { margin-left: 10px; font-size: 12px; color: #868e96; }
+.xl-in { margin-left: 10px; font-size: 12px; color: var(--xm-muted); }
 
 /* An agent waiting for the person (obeya wait): the ask under the toolbar, the frame outlined.
    z-index 3: over the canvas, under Excalidraw's UI layer (.layer-ui__wrapper, z 4), so the toolbar's menus open over it.
@@ -162,3 +197,127 @@ body:has(.excalidraw.theme--dark) .xl-wait-done { background: #7950f2; }
 body:has(.excalidraw.theme--dark) .xl-wait-done:hover { background: #9775fa; }
 body:has(.excalidraw.theme--dark) .xl-wait-frame { border-color: #9775fa; }
 body:has(.excalidraw.theme--dark) .xl-pill .xl-pill-waiting { color: #b197fc; }
+
+/* A markdown doc over the canvas (?page=<name>.md). It sits under
+   Excalidraw's UI layer (z 4), whose parts are hidden while it shows, all but
+   the page pill: the pill stays exactly where and how it is on a drawing. */
+#doc { display: none; position: fixed; inset: 0; z-index: 3; overflow: auto; background: #fff; color: #1d2330; outline: none;
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+body.doc-open #doc { display: block; }
+body.doc-open .layer-ui__wrapper { visibility: hidden; }
+body.doc-open .layer-ui__wrapper .excalidraw-ui-top-left { visibility: visible; }
+body.doc-open .layer-ui__wrapper__footer, body.doc-open .App-menu_bottom, body.doc-open .shapes-section, body.doc-open .layer-ui__wrapper__top-right, body.doc-open .welcome-screen-center { display: none !important; }
+/* A clear strip under the pill and the menu, so text scrolls away beneath it. */
+#doc .doc-top { position: sticky; top: 0; height: 72px; margin-bottom: -72px; z-index: 1;
+  background: linear-gradient(#fff 78%, rgba(255,255,255,0)); pointer-events: none; }
+#doc .doc-body { max-width: 860px; margin: 0 auto; padding: 88px 24px 96px; }
+#doc .markdown h1, #doc .markdown h2 { border-bottom: 1px solid #e2e5eb; padding-bottom: .3em; }
+#doc .markdown h1, #doc .markdown h2, #doc .markdown h3 { line-height: 1.25; margin: 1.6em 0 .6em; scroll-margin-top: 64px; }
+#doc .markdown h4, #doc .markdown h5, #doc .markdown h6 { scroll-margin-top: 64px; }
+#doc .markdown a { color: #4f46e5; }
+#doc .markdown code { font: 85% ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: .15em .35em; border-radius: 4px; }
+#doc .markdown pre { background: #f6f7f9; padding: 14px 16px; border-radius: 8px; overflow: auto; }
+#doc .markdown pre code { background: none; padding: 0; }
+#doc .markdown table { border-collapse: collapse; display: block; overflow: auto; margin: 1em 0; }
+#doc .markdown th, #doc .markdown td { border: 1px solid #e2e5eb; padding: 6px 12px; vertical-align: top; }
+#doc .markdown th { background: #f6f7f9; }
+#doc .markdown blockquote { margin: 1em 0; padding: 0 1em; color: #5b6475; border-left: 4px solid #e2e5eb; }
+#doc .markdown img { max-width: 100%; }
+/* What changed on disk (Read, the side-by-side preview): tinted, then fading. */
+#doc .markdown .doc-changed { --doc-tint: #ebfbee; border-radius: 4px; animation: doc-fade-block 4s ease-out forwards; }
+#doc .markdown tr.doc-changed { animation: none; }
+#doc .markdown tr.doc-changed > td { animation: doc-fade-block 4s ease-out forwards; }
+@keyframes doc-fade-block {
+  0%, 35% { background-color: var(--doc-tint); box-shadow: 0 0 0 6px var(--doc-tint); }
+  100% { background-color: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Read / Edit, top right, where Present sits on a drawing. */
+#doc .doc-mode { position: fixed; top: 16px; right: 16px; z-index: 2; height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid #e0e0e0;
+  background: #fff; color: #1e1e1e; font: 500 14px system-ui, sans-serif; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+#doc .doc-mode:hover { background: #f1f0ff; }
+#doc .doc-problem { position: fixed; top: 60px; right: 16px; z-index: 2; max-width: 360px; padding: 10px 14px; border-radius: 8px; background: #1e1e1e; color: #fff; font: 13px/1.45 system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+body.doc-editing #doc .doc-mode { border-color: #6965db; background: #f1f0ff; color: #6965db; }
+/* Edit: EasyMDE in the doc's column; the column widens while side by side. */
+#doc .doc-edit { display: none; max-width: 860px; margin: 0 auto; padding: 72px 24px 48px; }
+body.doc-editing #doc .doc-body { display: none; }
+body.doc-editing #doc .doc-edit { display: block; }
+/* Side by side (ours): a grid the height of the window under the pill's strip:
+   the toolbar, the editor and the preview, the status bar. The page itself
+   doesn't scroll; each pane scrolls on its own and they follow each other. */
+#doc .doc-edit.doc-split { max-width: none; padding: 72px 40px 0; }
+#doc .doc-split .EasyMDEContainer { height: calc(100vh - 72px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+#doc .doc-split .EasyMDEContainer > .editor-toolbar { grid-column: 1 / -1; grid-row: 1; }
+#doc .doc-split .EasyMDEContainer > .doc-clash-banner { grid-column: 1 / -1; grid-row: 2; }
+#doc .doc-split .EasyMDEContainer > .editor-statusbar { grid-column: 1 / -1; grid-row: 4; }
+#doc .doc-split .EasyMDEContainer > .CodeMirror { grid-column: 1; grid-row: 3; height: auto; min-height: 0; border-radius: 0 0 0 8px; }
+#doc .doc-split .CodeMirror-scroll { min-height: 0 !important; }
+#doc .doc-split .doc-preview { grid-column: 2; grid-row: 3; min-height: 0; overflow: auto; padding: 8px 24px; border: 1px solid #e2e5eb; border-left: 0; border-radius: 0 0 8px 0; background: #fff;
+  color: #1d2330; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+#doc .EasyMDEContainer .editor-toolbar { position: sticky; top: 64px; z-index: 1; background: #fff; border-color: #e2e5eb; border-radius: 8px 8px 0 0; opacity: 1; box-shadow: 0 -24px 0 #fff; }
+#doc .EasyMDEContainer .editor-toolbar button.doc-tb { font: 15px system-ui, sans-serif; color: #495057; width: 34px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+#doc .EasyMDEContainer .editor-toolbar .doc-serif { font: 18px Georgia, "Times New Roman", serif; }
+#doc .EasyMDEContainer .editor-toolbar .doc-quote { font-size: 26px; line-height: 1; position: relative; top: 5px; }
+#doc .EasyMDEContainer .editor-toolbar button.doc-tb.active, #doc .EasyMDEContainer .editor-toolbar button.doc-tb:hover { background: #f1f0ff; border-color: #6965db; color: #6965db; }
+#doc .EasyMDEContainer .CodeMirror { border-color: #e2e5eb; border-radius: 0 0 8px 8px; color: #343a40; font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#doc .EasyMDEContainer .CodeMirror .cm-formatting { color: #7a828a; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-1 { font-size: 1.35em; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-2 { font-size: 1.2em; }
+#doc .EasyMDEContainer .CodeMirror .cm-header-3, #doc .EasyMDEContainer .CodeMirror .cm-header-4 { font-size: 1.1em; }
+/* The status bar stays in view at the bottom while the doc scrolls, as it does side by side. */
+#doc .EasyMDEContainer .editor-statusbar { position: sticky; bottom: 0; z-index: 1; background: #fff; color: #868e96; font: 13px system-ui, sans-serif; }
+#doc .editor-statusbar .doc-save-saved { color: #2f9e44; }
+#doc .editor-statusbar .doc-save-clash, #doc .editor-statusbar .doc-save-error { color: #e8590c; }
+/* Tints that hold a moment, then fade out: the line Edit landed on, lines merged in. */
+#doc .CodeMirror .doc-landed { --doc-tint: #f1f0ff; --doc-edge: transparent; animation: doc-fade 1.6s ease-out forwards; }
+#doc .CodeMirror .doc-merged { --doc-tint: #ebfbee; --doc-edge: #2f9e44; animation: doc-fade 4s ease-out forwards; }
+@keyframes doc-fade {
+  0%, 35% { background-color: var(--doc-tint); box-shadow: inset 3px 0 var(--doc-edge); }
+  100% { background-color: transparent; box-shadow: inset 3px 0 transparent; }
+}
+#doc .CodeMirror .doc-clash { background: #fff4e6; }
+/* A clash: a banner inside the editor, under the toolbar; typing goes on. */
+#doc .doc-clash-banner { position: sticky; top: 114px; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 10px 12px 10px 16px;
+  border: 1px solid #ffd8a8; border-radius: 8px; background: #fff4e6; font: 13px system-ui, sans-serif; color: #495057; }
+#doc .doc-clash-banner div { flex: 1; display: flex; flex-direction: column; }
+#doc .doc-clash-banner b { font-size: 15px; color: #1d2330; }
+#doc .doc-clash-banner button { border: 1px solid #ced4da; background: #fff; border-radius: 6px; padding: 6px 14px; font: inherit; cursor: pointer; }
+#doc .doc-clash-banner button.primary { background: #6965db; border-color: #6965db; color: #fff; }
+#doc .doc-clash-banner.doc-nudge { animation: doc-nudge .3s; }
+@keyframes doc-nudge { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* A sideways two-finger pan on a trackpad pans the canvas, never Back/Forward. */
+html, body { overscroll-behavior-x: none; }
+
+/* A doc in the dark theme: it follows the theme picked on the drawings. */
+body:has(.excalidraw.theme--dark) #doc { background: #121212; color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .doc-top { background: linear-gradient(#121212 78%, rgba(18,18,18,0)); }
+body:has(.excalidraw.theme--dark) #doc .markdown a { color: #a5b4fc; }
+body:has(.excalidraw.theme--dark) #doc .markdown h1, body:has(.excalidraw.theme--dark) #doc .markdown h2 { border-bottom-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .markdown code { background: #26262b; }
+body:has(.excalidraw.theme--dark) #doc .markdown pre { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .markdown th, body:has(.excalidraw.theme--dark) #doc .markdown td { border-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .markdown th { background: #1c1c20; }
+body:has(.excalidraw.theme--dark) #doc .markdown blockquote { color: #a1a1aa; border-left-color: #3a3a40; }
+body:has(.excalidraw.theme--dark) #doc .doc-mode, body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror, body:has(.excalidraw.theme--dark) #doc .doc-preview { background: #1c1c20; color: #e3e3e8; border-color: #2e2e33; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-statusbar { background: #121212; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar { box-shadow: 0 -24px 0 #121212; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-cursor { border-left-color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb { color: #c1c2c5; }
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-merged { --doc-tint: #1f3326; }
+body:has(.excalidraw.theme--dark) #doc .markdown .doc-changed { --doc-tint: #1f3326; }
+/* EasyMDE's own colours are for a light page: the selection, inline code, the landing tint. */
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-landed { --doc-tint: #2b2a4a; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-selected,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected { background: #3d3b72; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line::selection,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line > span::selection,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .CodeMirror-line > span > span::selection { background: #3d3b72; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .cm-comment { background: rgba(255, 255, 255, .08); }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .cm-formatting { color: #8b929a; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb.active,
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar button.doc-tb:hover { background: #2b2a4a; border-color: #6965db; color: #b9b5ff; }
+body:has(.excalidraw.theme--dark) #doc .EasyMDEContainer .editor-toolbar i.separator { border-left-color: #3a3a40; border-right-color: transparent; }
+body:has(.excalidraw.theme--dark) #doc .CodeMirror .doc-clash, body:has(.excalidraw.theme--dark) #doc .doc-clash-banner { background: #3a2a18; border-color: #5c3d1a; color: #e3e3e8; }
+body:has(.excalidraw.theme--dark) #doc .doc-clash-banner b { color: #fff; }

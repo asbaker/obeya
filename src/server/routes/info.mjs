@@ -1,11 +1,8 @@
-// The server itself and the tabs: info, shutdown, a tab's answer to a request,
-// a tab reporting use, and the component libraries for the editor's sidebar.
 import { json, readJSON } from "../http.mjs";
 import { findChrome } from "../../lib/chrome.mjs";
 import { sidebarItems } from "../../lib/library.mjs";
 import { loadAllCached } from "../../lib/libcache.mjs";
 
-/** @param {{tabs: any, dir: string, port: number, version: string, idleMinutes: number, shutdown: () => void}} ctx */
 export function infoRoutes({ tabs, dir, port, version, idleMinutes, shutdown }) {
   return [
     ["GET", "/api/info", ({ res }) => json(res, 200, {

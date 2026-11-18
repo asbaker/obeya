@@ -6,6 +6,7 @@ import { RENDERER, S } from "./state.mjs";
 import { getJSON, postJSON, reportUsed } from "./server-link.mjs";
 import { editorJob, flushSync, nextFrame } from "./sync.mjs";
 import { focusFrame } from "./present.mjs";
+import { hideDoc, isDocName, showDoc } from "./doc.mjs";
 
 // Pages this browser opened lately, newest first (for the page picker).
 const RECENT_KEY = "obeya-recent";
@@ -17,28 +18,48 @@ export function rememberPage(name) {
   localStorage.setItem(RECENT_KEY, JSON.stringify([name, ...recentPages().filter((n) => n !== name)].slice(0, 8)));
 }
 
-// --- pages ---------------------------------------------------------------------
 // A new page is saved when it's created, then opened.
 export const makePage = (name) => postJSON(`/api/pages/${encodeURIComponent(name)}`, {});
 export async function createPage(name) {
   await makePage(name);
-  await openPage(name);
+  await openPage(name, null, { edit: isDocName(name) }); // a new doc opens in Edit
 }
 /**
  * Open a page. Each switch is a browser history entry, so Back and Forward
  * move between pages; `history: "replace"` for the first page, a page that
  * replaces a deleted one, and Back/Forward themselves.
  */
-export async function openPage(name, frameId, { history: how = "push" } = {}) {
+export async function openPage(name, frameId, { history: how = "push", heading, edit = false } = {}) {
   name = normalizePageName(name); // from a URL or a link: the NFC form the server uses
+  if (isDocName(name)) {
+    // A doc covers the canvas; a drawing stays loaded underneath (the first one
+    // if the tab opened straight onto a doc).
+    if (S.currentPage === null) {
+      const { pages } = await getJSON("/api/pages");
+      if (pages[0]) await editorJob((hold) => loadPage(pages[0].name, hold, "replace"));
+    }
+    await showDoc(name, heading, { history: S.currentPage === null || how === "replace" ? "replace" : how, edit });
+    if (!RENDERER) rememberPage(name);
+    return;
+  }
+  const fromDoc = document.body.classList.contains("doc-open");
+  hideDoc();
   if (name !== S.currentPage) await editorJob((hold) => loadPage(name, hold, how));
+  else if (fromDoc && how === "push" && !RENDERER) {
+    // Back to the drawing that was under the doc: its own history entry.
+    const u = new URL(location.href);
+    u.searchParams.set("page", name);
+    u.hash = "";
+    history.pushState(null, "", u.pathname + u.search);
+  }
   goTo(frameId);
 }
 // Back and Forward: open the page the entry names, without adding an entry.
 if (!RENDERER) {
   window.addEventListener("popstate", () => {
     const name = new URLSearchParams(location.search).get("page");
-    if (name && S.api) openPage(name, null, { history: "replace" }).catch((err) => console.error(err));
+    const heading = location.hash ? decodeURIComponent(location.hash.slice(1)) : undefined;
+    if (name && S.api) openPage(name, null, { history: "replace", heading }).catch((err) => console.error(err));
   });
 }
 async function loadPage(name, hold, how = "push") {

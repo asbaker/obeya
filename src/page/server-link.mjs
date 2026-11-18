@@ -1,5 +1,4 @@
-// Talking to the server: requests, reporting which tab is in use, and the
-// event stream (agent requests, live updates, reconnecting).
+import { wins } from "/lib/merge.mjs";
 import { RENDERER, TAB_ID, S } from "./state.mjs";
 import { toast } from "./ui/common.mjs";
 import { createMachine } from "/lib/machine.mjs";
@@ -16,22 +15,19 @@ export function notice(html) {
   document.getElementById("notice").classList.add("on");
 }
 
-// --- server helpers ------------------------------------------------------------
 export async function request(u, init = {}) {
   const r = await fetch(u, init);
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(body.error?.message || `HTTP ${r.status}`), { code: body.error?.code });
+  if (!r.ok) throw Object.assign(new Error(body.error?.message || `HTTP ${r.status}`), { code: body.error?.code, body });
   return body;
 }
 export const getJSON = (u) => request(u);
 export const postJSON = (u, body, extra = {}) =>
   request(u, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), ...extra });
 
-// --- agent requests (server-sent events) ----------------------------------------
 export const answer = (reqId, body) => postJSON(`/api/answer/${reqId}`, body);
 export const fail = (reqId, code, message) => answer(reqId, { error: { code, message } });
 
-// --- which tab is "in use" ------------------------------------------------------
 // Agent requests go to the tab the person used last. Tell the server whenever
 // this tab is used (focus, pointer, keys) and which page it shows.
 let usedTimer = null;
@@ -57,7 +53,10 @@ let catchRound = 0;
 // The server names the folder it serves: if the port comes back serving
 // another folder, stop here rather than save this page's edits into it.
 let folder = null;
-let stream = null; // this tab's event stream
+// The server's obeya version, from its first hello; a later hello with another
+// one means it was restarted after an update.
+let serverVersion = null;
+let stream = null;
 
 // Connected only once the editor is ready, so the server never counts a tab
 // that can't yet answer agent requests.
@@ -79,7 +78,7 @@ function openStream() {
   const q = new URLSearchParams({ tab: TAB_ID });
   if (S.currentPage) q.set("page", S.currentPage);
   if (RENDERER) q.set("renderer", "1");
-  q.set("caps", "layout,mermaid,park"); // what this page's code can do; a tab opened before an upgrade lacks it
+  q.set("caps", "layout,mermaid,park,pins"); // what this page's code can do; a tab opened before an upgrade lacks it
   const events = (stream = new EventSource(`/events?${q}`));
   events.addEventListener("remote-elements", (e) => applyRemote(JSON.parse(e.data)));
   events.addEventListener("agent-patch", (e) => queuePatch(JSON.parse(e.data)));
@@ -89,12 +88,22 @@ function openStream() {
   events.addEventListener("mermaid", (e) => handleMermaid(JSON.parse(e.data)));
   events.addEventListener("libraries-changed", () => loadLibraries());
   events.addEventListener("waits", (e) => setWaits(JSON.parse(e.data).waits));
+  events.addEventListener("update", (e) => S.setUi((s) => ({ ...s, update: JSON.parse(e.data).update })));
+  events.addEventListener("doc", (e) => import("./doc.mjs").then(({ reloadDoc }) => reloadDoc(JSON.parse(e.data).name)));
   events.addEventListener("pages", (e) => {
     const { pages, skipped } = JSON.parse(e.data);
     S.setUi((s) => ({ ...s, pages, skipped }));
   });
   events.addEventListener("page-renamed", (e) => {
     const { from, to } = JSON.parse(e.data);
+    // The doc on screen was renamed: show it under its new name, same history entry.
+    if (from.endsWith(".md")) {
+      import("./doc.mjs").then(({ docShown, showDoc }) => {
+        forgetPage(from);
+        if (docShown() === from) showDoc(to, null, { history: "replace" }).then(() => rememberPage(to)).catch(() => {});
+      });
+      return;
+    }
     if (S.currentPage !== from) return;
     S.currentPage = to;
     const u = new URL(location.href);
@@ -109,10 +118,22 @@ function openStream() {
   events.addEventListener("page-deleted", async (e) => {
     const { page } = JSON.parse(e.data);
     forgetPage(page);
+    // The doc on screen was deleted: the drawing underneath comes back.
+    if (page.endsWith(".md")) {
+      const { docShown, hideDoc } = await import("./doc.mjs");
+      if (docShown() !== page) return;
+      hideDoc();
+      if (S.currentPage) {
+        const u = new URL(location.href);
+        u.searchParams.set("page", S.currentPage);
+        u.hash = "";
+        history.replaceState(null, "", u.pathname + u.search);
+      }
+      return toast(`Deleted ${page}. It's in .obeya/.trash/ if you need it back.`, { duration: 5000 });
+    }
     if (S.currentPage !== page) return;
     const { pages } = await getJSON("/api/pages").catch(() => ({ pages: [] }));
     const names = pages.map((p) => p.name);
-    // The most recent other page first, then the rest.
     const order = [...new Set([...recentPages().filter((n) => names.includes(n)), ...names])];
     // Leave it first: opening a page saves pending edits to the one on screen,
     // which would bring the deleted page back.
@@ -128,11 +149,18 @@ function openStream() {
   // Tabs survive restarts: EventSource reconnects by itself, and
   // the tab then catches up with the server and sends what it couldn't save.
   events.addEventListener("hello", (e) => {
-    const { dir } = JSON.parse(e.data);
+    const { dir, version } = JSON.parse(e.data);
     if (folder && dir !== folder) {
       events.close();
       return connection.send("OTHER_FOLDER");
     }
+    // The server came back as another obeya (an update): load its page code.
+    // Leaving the page saves what's pending (pagehide).
+    if (serverVersion && version && version !== serverVersion && !RENDERER) {
+      events.close();
+      return location.reload();
+    }
+    serverVersion = version;
     folder = dir;
     connection.send("HELLO");
   });
@@ -183,8 +211,18 @@ function watchConnection() {
 async function catchUp() {
   try {
     if (S.currentPage) {
-      const { scene } = await getJSON(`/api/pages/${encodeURIComponent(S.currentPage)}?ifMissing=empty`);
-      await applyRemote({ page: S.currentPage, elements: scene.elements, files: scene.files });
+      const page = S.currentPage;
+      const { scene } = await getJSON(`/api/pages/${encodeURIComponent(page)}?ifMissing=empty`);
+      await applyRemote({ page, elements: scene.elements, files: scene.files });
+      // A server that stopped before saving (a crash, a kill) comes back with
+      // older copies than this tab already had from it: deleted elements alive
+      // again. Send back what this tab holds newer than the server's copy; the
+      // same version rule then keeps the newer one on both sides.
+      if (S.api && S.currentPage === page) {
+        const theirs = new Map(scene.elements.map((e) => [e.id, e]));
+        const ahead = S.api.getSceneElementsIncludingDeleted().filter((e) => S.known.get(e.id) === e.version && wins(e, theirs.get(e.id)) && (theirs.has(e.id) || !e.isDeleted));
+        if (ahead.length) await postJSON(`/api/pages/${encodeURIComponent(page)}/sync`, { elements: ahead, layout: [], files: {}, tab: TAB_ID });
+      }
     }
     await flushSync();
     reportUsed();

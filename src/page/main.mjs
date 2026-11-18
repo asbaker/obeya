@@ -1,6 +1,4 @@
-// The canvas page: mounts Excalidraw with our controls, and wires keys,
-// pages, sync and the event stream together. No build step: the browser loads
-// these modules straight from the server.
+// No build step: the browser loads these modules straight from the server.
 import { React, h, createRoot, Excalidraw, MainMenu, WelcomeScreen } from "./deps.mjs";
 import { params, RENDERER, MAC, KEY_PAGES, KEY_PRESENT, KEY_EXPORT, S } from "./state.mjs";
 import { baseName, folderOf, shortFolder } from "/lib/names.mjs";
@@ -11,6 +9,7 @@ import { presenting, setPresent, stepFrame, togglePresent } from "./present.mjs"
 import { linkForSelection, onLinkOpen } from "./links.mjs";
 import { loadLibraries } from "./render.mjs";
 import { installTestHooks } from "./test-hooks.mjs";
+import { loadFonts, registerFonts } from "./fonts.mjs";
 import { PagePicker } from "./ui/page-picker.mjs";
 import { RenameDialog } from "./ui/rename.mjs";
 import { ExportDialog } from "./ui/export-dialog.mjs";
@@ -30,7 +29,7 @@ document.addEventListener("keydown", (ev) => {
   if (mod && ev.shiftKey && !ev.altKey && ev.code === "KeyE") {
     ev.preventDefault();
     ev.stopPropagation();
-    S.openExport();
+    if (!document.body.classList.contains("doc-open")) S.openExport(); // a doc has nothing to export
     return;
   }
   if (mod && !ev.shiftKey && !ev.altKey && ev.code === "KeyO") {
@@ -59,13 +58,24 @@ document.addEventListener("keydown", (ev) => {
   stepFrame(delta);
 }, true);
 
+// The theme the person picked (light or dark) outlives a refresh: this browser
+// remembers it. The export renderer always starts light.
+const THEME_KEY = "obeya.theme";
+const NEWS_SEEN_KEY = "obeya.updateSeen"; // the newest version whose news the person has seen in About
+const savedTheme = () => (!RENDERER && localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light");
+let themeNow = savedTheme();
+
 // Present is greyed out on a page without frames; its tooltip says why.
 let hasFramesNow = false;
-function onEditorChange(elements) {
+function onEditorChange(elements, appState) {
   const has = elements.some((e) => e.type === "frame" && !e.isDeleted);
   if (has !== hasFramesNow) {
     hasFramesNow = has;
     S.setUi((s) => ({ ...s, hasFrames: has }));
+  }
+  if (appState?.theme && appState.theme !== themeNow && !RENDERER) {
+    themeNow = appState.theme;
+    localStorage.setItem(THEME_KEY, themeNow);
   }
   onChange();
 }
@@ -109,9 +119,21 @@ function Pill({ page, n, waiting, isMobile }) {
 }
 
 function App() {
-  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [] });
+  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [], update: null });
   const [dialog, setDialog] = React.useState(dialogs.state);
   React.useEffect(() => dialogs.subscribe(setDialog), []);
+  // A newer obeya is out: a dot on ☰ and a chip on About obeya until About is
+  // opened for that version (this browser remembers it).
+  const [seen, setSeen] = React.useState(() => localStorage.getItem(NEWS_SEEN_KEY));
+  const news = !RENDERER && ui.update?.to && seen !== ui.update.to ? ui.update : null;
+  React.useEffect(() => { document.body.classList.toggle("xl-has-news", Boolean(news)); }, [news]);
+  React.useEffect(() => {
+    if (dialog !== "about" || !ui.update?.to || seen === ui.update.to) return;
+    localStorage.setItem(NEWS_SEEN_KEY, ui.update.to);
+    setSeen(ui.update.to);
+  }, [dialog, ui.update?.to]);
+  const aboutItem = h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" },
+    h("span", { className: "xl-about-item" }, "About obeya", news ? h("span", { className: "xl-news-chip", "data-testid": "menu-news" }, "New version") : null));
   S.setUi = set;
   S.openPicker = () => openDialog("PICKER");
   S.openExport = () => S.currentPage && openDialog("EXPORT");
@@ -141,15 +163,17 @@ function App() {
         onInitialize: async (a) => {
           S.api = a;
           try {
+            await loadFonts(); // before the first page or patch measures any text
             const { pages } = await getJSON("/api/pages");
             const start = params.get("page") || pages[0]?.name;
-            if (start) await openPage(start, params.get("element"));
+            if (start) await openPage(start, params.get("element"), { heading: location.hash ? decodeURIComponent(location.hash.slice(1)) : undefined });
             connectEvents();
             loadLibraries();
           } catch (err) {
             console.error(err);
           }
         },
+        initialData: { appState: { theme: themeNow } },
         onChange: onEditorChange,
         onLinkOpen,
         generateLinkForSelection: (id) => linkForSelection(id),
@@ -159,24 +183,33 @@ function App() {
         renderTopRightUI: present,
         UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false } },
       },
-        h(MainMenu, null,
-          // File-menu order: new, open, rename; then what to do with this page.
-          h(MainMenu.Group, { title: "obeya" },
-            h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
-            h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
-            h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this page…"),
+        // On a markdown doc the menu is the doc's: new, open, rename, about.
+        ui.page?.endsWith(".md")
+          ? h(MainMenu, null,
+            h(MainMenu.Group, { title: "obeya" },
+              h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
+              h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
+              h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this doc…"),
+              h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false })),
             h(MainMenu.Separator),
-            h(MainMenu.Item, { onSelect: S.openExport, shortcut: KEY_EXPORT, "data-testid": "menu-export" }, "Export…"),
-            h(MainMenu.Item, { onSelect: togglePresent, shortcut: KEY_PRESENT, "data-testid": "menu-present" }, "Present")),
-          h(MainMenu.Separator),
-          h(MainMenu.DefaultItems.SearchMenu),
-          h(MainMenu.DefaultItems.CommandPalette),
-          h(MainMenu.DefaultItems.Help),
-          h(MainMenu.Item, { onSelect: S.openAbout, icon: h("img", { className: "xl-menu-mark", src: "/page/logo.svg", alt: "" }), "data-testid": "menu-about" }, "About obeya"),
-          h(MainMenu.DefaultItems.ClearCanvas),
-          h(MainMenu.Separator),
-          h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false }),
-          h(MainMenu.DefaultItems.ChangeCanvasBackground)),
+            aboutItem)
+          : h(MainMenu, null,
+            h(MainMenu.Group, { title: "obeya" },
+              h(MainMenu.Item, { onSelect: () => newPage(), "data-testid": "menu-new-page" }, "New page…"),
+              h(MainMenu.Item, { onSelect: S.openPicker, shortcut: KEY_PAGES, "data-testid": "menu-pages" }, "Open page…"),
+              h(MainMenu.Item, { onSelect: () => openDialog("RENAME"), "data-testid": "menu-rename" }, "Rename or move this page…"),
+              h(MainMenu.Separator),
+              h(MainMenu.Item, { onSelect: S.openExport, shortcut: KEY_EXPORT, "data-testid": "menu-export" }, "Export…"),
+              h(MainMenu.Item, { onSelect: togglePresent, shortcut: KEY_PRESENT, "data-testid": "menu-present" }, "Present")),
+            h(MainMenu.Separator),
+            h(MainMenu.DefaultItems.SearchMenu),
+            h(MainMenu.DefaultItems.CommandPalette),
+            h(MainMenu.DefaultItems.Help),
+            aboutItem,
+            h(MainMenu.DefaultItems.ClearCanvas),
+            h(MainMenu.Separator),
+            h(MainMenu.DefaultItems.ToggleTheme, { allowSystemTheme: false }),
+            h(MainMenu.DefaultItems.ChangeCanvasBackground)),
         RENDERER ? null : welcome(ui.page))),
     ui.present && ui.presentPos ? h(PresentControls, { pos: ui.presentPos }) : null,
     !RENDERER && !ui.present && ui.waits.some((w) => w.page === ui.page) ? h(WaitBanner, { waits: ui.waits.filter((w) => w.page === ui.page) }) : null,
@@ -184,9 +217,10 @@ function App() {
     dialog === "new" ? h(NewPageDialog, { names: ui.pages.map((p) => p.name), folder: ui.newIn ?? folderOf(ui.page ?? ""), onClose: closeDialog }) : null,
     dialog === "rename" ? h(RenameDialog, { current: ui.page, names: ui.pages.map((p) => p.name), onClose: closeDialog }) : null,
     dialog === "export" ? h(ExportDialog, { page: ui.page, onClose: closeDialog }) : null,
-    dialog === "about" ? h(AboutDialog, { onClose: closeDialog }) : null);
+    dialog === "about" ? h(AboutDialog, { update: ui.update, onClose: closeDialog }) : null);
 }
 
+registerFonts(); // before Excalidraw mounts: its font menu reads the list once
 createRoot(document.getElementById("root")).render(h(App));
 window.addEventListener("pagehide", () => flushSync({ keepalive: true }));
 installTestHooks();

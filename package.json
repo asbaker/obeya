@@ -1,6 +1,6 @@
 {
   "name": "obeya",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A local-only shared Excalidraw canvas for a person and an AI agent, driven by a JSON CLI. Not an official Excalidraw project.",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,9 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "obeya": {
+    "headline": "Markdown docs you both edit, sketch/clean/hifi looks, numbered pins, new fonts, update notices"
+  },
   "engines": {
     "node": ">=22.20"
   },

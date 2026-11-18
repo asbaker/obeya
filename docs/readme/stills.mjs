@@ -28,7 +28,7 @@ function obeya(args, input) {
   if (out.error) throw new Error(`obeya ${args.join(" ")}: ${out.error.code} ${out.error.message}`);
   return out.result;
 }
-const patch = (page, p) => obeya(["patch", page, "--file", "-"], p);
+const patch = (page, p, style) => obeya(["patch", page, "--file", "-", ...(style ? ["--style", style] : [])], p);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- small drawing helpers ------------------------------------------------------------
@@ -331,14 +331,201 @@ const ARCH = [
 ];
 const ARCH_X = (c) => 60 + c * 300, ARCH_Y = (r) => 160 + r * 300;
 
+// --- What you get: one still per feature -------------------------------------------------
+// Each is a page named feature-<name>, exported to feature-<name>.png at the gallery's shape.
+const mono = (id, x, y, w, h, t, o = {}) => ({ ...box(id, x, y, w, h, null, { bg: o.bg ?? "#f8f9fa", stroke: o.stroke ?? "#ced4da", round: false }),
+  label: { text: t, fontSize: o.size ?? 20, fontFamily: 3, textAlign: "left", verticalAlign: "top", strokeColor: o.color ?? "#1e1e1e" } });
+const big = (id, x, y, w, h, label, bg, size = 26) => box(id, x, y, w, h, label, { bg, stroke: "#495057", size });
+const curve = (id, x, y, pts, o = {}) => { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  return { type: "line", id, x, y, points: pts, width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), strokeColor: o.stroke ?? "#e03131", strokeWidth: o.width ?? 4, roundness: { type: 2 } }; };
+
+const ASCII = [
+  "+--------+     +-------+     +------+",
+  "| Client | --> |  API  | --> |  DB  |",
+  "+--------+     +---+---+     +------+",
+  "                   |",
+  "                   v",
+  "              +---------+",
+  "              |  Queue  |",
+  "              +---------+",
+].join("\n");
+function featureDraws() {
+  const grey = { strokeColor: "#868e96" };
+  return [
+    text("fd-l1", 40, 40, "Before: in the terminal", 26, grey),
+    { ...box("fd-term", 40, 100, 660, 300, null, { bg: "#1e1e1e", stroke: "#1e1e1e", round: false }) },
+    text("fd-ascii", 70, 140, ASCII, 20, { fontFamily: 3, strokeColor: "#e9ecef" }),
+    text("fd-l2", 800, 40, "With obeya: on the canvas", 26, grey),
+    big("fd-c", 800, 130, 200, 100, "Client", C.blue),
+    big("fd-a", 1090, 130, 200, 100, "API", C.green),
+    big("fd-d", 1380, 130, 180, 100, "DB", C.violet),
+    big("fd-q", 1090, 380, 200, 100, "Queue", C.yellow),
+    arrow("fd-x1", 1002, 180, 86, 0, "fd-c", "fd-a"),
+    arrow("fd-x2", 1292, 180, 86, 0, "fd-a", "fd-d"),
+    arrow("fd-x3", 1190, 232, 0, 146, "fd-a", "fd-q", "OrderPlaced"),
+  ];
+}
+
+const ANSWER_JSON = `{"op": "added", "type": "ellipse",
+ "pointsAt": [{"type": "rectangle",
+               "text": "Email me a link"}]}
+
+{"op": "added", "type": "stickynote",
+ "text": "B, plus a Google button",
+ "pointsAt": [{"type": "ellipse"}]}`;
+function featureAnswer() {
+  const grey = { strokeColor: "#868e96" };
+  return [
+    ...phone("fa", 40, 50, 500, 700, [
+      text("fa-h", 26, 100, "Sign in with email", 34),
+      text("fa-sub", 26, 152, "We'll email you a link. No password.", 18, grey),
+      heroButton("fa-cta", 26, 340, "Email me a link"),
+    ]),
+    { type: "ellipse", id: "fa-circle", x: 40, y: 355, width: 520, height: 130, strokeColor: "#e03131", strokeWidth: 3, backgroundColor: "transparent" },
+    note("fa-note", 300, 520, "B, plus a Google button", C.pink, 240, 150, 20),
+    text("fa-l", 680, 60, "What your agent reads when you press Done", 26, grey),
+    mono("fa-json", 680, 120, 900, 290, ANSWER_JSON, { size: 22 }),
+    arrow("fa-x", 545, 590, 130, -170, null, null, "Done"),
+  ];
+}
+
+function featureChecks() {
+  const red = "#e03131", grey = { strokeColor: "#868e96" };
+  const flag = (id, x, y, w, h) => ({ ...box(id, x, y, w, h, null, { stroke: red }), strokeStyle: "dashed", strokeWidth: 2 });
+  return [
+    text("fc-l1", 40, 40, "What lint finds", 26, grey),
+    big("fc-a", 60, 110, 260, 110, "Pricing", C.blue, 24), big("fc-b", 240, 170, 260, 110, "Plans", C.green, 24),
+    flag("fc-f1", 44, 96, 474, 200), text("fc-t1", 540, 175, "overlap", 22, { strokeColor: red }),
+    box("fc-c", 60, 340, 220, 64, null, { stroke: "#495057" }), text("fc-ct", 76, 357, "Start your free trial today", 24),
+    flag("fc-f2", 44, 326, 420, 92), text("fc-t2", 540, 355, "text runs out of its box", 22, { strokeColor: red }),
+    text("fc-d", 60, 470, "Cancel anytime", 26, { strokeColor: "#dee2e6" }),
+    flag("fc-f3", 44, 456, 230, 60), text("fc-t3", 540, 474, "too faint to read", 22, { strokeColor: red }),
+    line("fc-div", 840, 60, 0, { h: 520, stroke: "#dee2e6" }),
+    text("fc-l2", 900, 40, "After it fixes them", 26, grey),
+    big("fc-a2", 920, 110, 260, 110, "Pricing", C.blue, 24), big("fc-b2", 1220, 110, 260, 110, "Plans", C.green, 24),
+    box("fc-c2", 920, 340, 400, 64, "Start your free trial today", { stroke: "#495057", size: 24 }),
+    text("fc-d2", 920, 470, "Cancel anytime", 26, { strokeColor: "#495057" }),
+    text("fc-ok", 920, 560, "✓ lint: nothing to fix", 24, { strokeColor: "#2f9e44" }),
+  ];
+}
+
+function featureLook() {
+  const names = ["Goals", "Users", "Pricing", "Flows", "Risks", "Plan"];
+  const at = (i) => [80 + (i % 3) * 460, 110 + Math.floor(i / 3) * 340];
+  const els = [];
+  names.forEach((n, i) => { const [x, y] = at(i); els.push(box(`fl-${i}`, x, y, 360, 220, n, { bg: "#f8f9fa", stroke: "#adb5bd", size: 28 })); });
+  els.push({ ...box("fl-old", 50, 80, 420, 280, null, { stroke: "#adb5bd" }), strokeStyle: "dashed", strokeWidth: 2 });
+  els.push(text("fl-old-t", 60, 40, "your view", 20, { strokeColor: "#adb5bd" }));
+  els.push({ ...box("fl-new", 970, 80, 420, 280, null, { stroke: "#1971c2" }), strokeWidth: 5 });
+  els.push(text("fl-new-t", 980, 40, "your view, moved by your agent", 20, { strokeColor: "#1971c2" }));
+  els.push({ type: "arrow", id: "fl-x", x: 260, y: 364, width: 920, height: 40, points: [[0, 0], [0, 40], [920, 40], [920, 0]], strokeColor: "#1971c2", strokeWidth: 2, endArrowhead: "arrow", label: { text: "\"Look at Pricing\"", fontSize: 20, strokeColor: "#1971c2" } });
+  return els;
+}
+
+function featureComponentsPanel() {
+  const grey = { strokeColor: "#868e96" };
+  return [
+    box("fcp-panel", 40, 60, 480, 560, null, { bg: "#f8f9fa", stroke: "#ced4da" }),
+    text("fcp-h", 70, 85, "Libraries", 28),
+    box("fcp-q", 70, 140, 420, 56, "🔍  aws lambda", { bg: "#ffffff", stroke: "#adb5bd", size: 22 }),
+    box("fcp-r1", 70, 230, 420, 64, "AWS Serverless Icons v2", { bg: C.blue, stroke: "#1971c2", size: 22 }),
+    box("fcp-r2", 70, 310, 420, 64, "ecommerce mobile ui", { bg: "#ffffff", stroke: "#ced4da", labelColor: "#495057", size: 22 }),
+    box("fcp-r3", 70, 390, 420, 64, "C4 architecture", { bg: "#ffffff", stroke: "#ced4da", labelColor: "#495057", size: 22 }),
+    text("fcp-more", 70, 490, "about 230 public libraries", 20, grey),
+    text("fcp-l", 640, 70, "Inserted, ready to edit", 26, grey),
+  ];
+}
+
+function featureShare() {
+  const bars = [120, 180, 240, 330];
+  return [
+    box("fs-present", 40, 40, 200, 54, "▶  Present", { bg: "#1e1e1e", stroke: "#1e1e1e", labelColor: "#ffffff", size: 22 }),
+    box("fs-slide", 40, 120, 840, 480, null, { bg: "#ffffff", stroke: "#ced4da", round: false }),
+    text("fs-title", 80, 150, "Checkout · Q3", 40),
+    text("fs-sub", 80, 210, "Conversion by month", 22, { strokeColor: "#868e96" }),
+    ...bars.map((h, i) => box(`fs-b${i}`, 140 + i * 170, 570 - h, 110, h, null, { bg: C.blue, stroke: "#1971c2", round: false })),
+    curve("fs-laser", 610, 210, [[0, 30], [60, -10], [140, 0], [170, 50], [130, 90], [50, 90], [10, 60], [40, 20]]),
+    box("fs-menu", 960, 120, 380, 400, null, { bg: "#f8f9fa", stroke: "#ced4da" }),
+    text("fs-menu-h", 990, 145, "Export", 28),
+    ...["PNG", "SVG", "PDF", "HTML slideshow, one file"].map((t, i) => box(`fs-m${i}`, 990, 205 + i * 74, 320, 58, t, { bg: "#ffffff", stroke: "#ced4da", labelColor: "#495057", size: 22 })),
+  ];
+}
+
+// Rough or polished: the hero's magic-link screen, once per look. Sketch and clean take the
+// look's medium (`--style`); hifi sets its own fonts and colours.
+function signIn(k, look) {
+  const x0 = 40 + k * 470, y0 = 60, hifi = look === "hifi";
+  const f = (name) => (hifi ? { fontFamily: name } : {});
+  const els = [
+    { ...box(`lk${k}-shell`, 0, 0, 400, 540, null, { bg: "#ffffff", stroke: hifi ? "#dee2e6" : "#1e1e1e" }), strokeWidth: hifi ? 1 : 2 },
+    ...(hifi ? [{ type: "ellipse", id: `lk${k}-logo`, x: 32, y: 40, width: 44, height: 44, backgroundColor: "#4263eb", strokeColor: "#4263eb", fillStyle: "solid" }] : []),
+    text(`lk${k}-h`, 32, 110, "Sign in with email", 32, f("Inter Bold")),
+    text(`lk${k}-sub`, 32, 160, "We'll email you a link.\nNo password.", 18, { strokeColor: "#868e96", ...f("Inter") }),
+    box(`lk${k}-field`, 32, 250, 336, 56, null, { bg: "#ffffff", stroke: hifi ? "#ced4da" : "#1e1e1e" }),
+    text(`lk${k}-ph`, 48, 266, "you@example.com", 20, { strokeColor: "#adb5bd", ...f("Inter") }),
+    { ...box(`lk${k}-cta`, 32, 340, 336, 60, "Email me a link", { bg: hifi ? "#4263eb" : "#1e1e1e", stroke: hifi ? "#4263eb" : "#1e1e1e", labelColor: "#ffffff", size: 22 }),
+      ...(hifi ? { label: { text: "Email me a link", fontSize: 22, strokeColor: "#ffffff", fontFamily: "Inter Bold" } } : {}) },
+    text(`lk${k}-alt`, 32, 440, "Continue with Google", 20, { strokeColor: hifi ? "#4263eb" : "#1e1e1e", ...f("Inter") }),
+  ];
+  return els.map((e) => ({ ...e, x: e.x + x0, y: e.y + y0 }));
+}
+const LOOKS3 = ["sketch", "clean", "hifi"];
+function featureLooksFrame() {
+  return [
+    ...LOOKS3.map((l, k) => text(`lk${k}-cap`, 40 + k * 470 + 160, 625, l, 28, { fontFamily: "Inter", strokeColor: "#495057" }))];
+}
+
+function featurePins() {
+  const plans = [["Free", "$0", "1 board"], ["Team", "$8", "Unlimited boards"], ["Business", "$20", "SSO and audit log"]];
+  const els = [text("fp-title", 40, 30, "Pricing · draft", 32)];
+  plans.forEach(([name, price, line1], i) => {
+    const x = 40 + i * 320, p = `fp-${name.toLowerCase()}`;
+    els.push(box(`${p}`, x, 100, 280, 400, null, { bg: "#ffffff", stroke: "#495057" }));
+    els.push(text(`${p}-n`, x + 24, 124, name, 28));
+    els.push(text(`${p}-price`, x + 24, 180, price, 44));
+    els.push(text(`${p}-l`, x + 24, 260, line1, 20, { strokeColor: "#495057" }));
+    els.push(box(`${p}-cta`, x + 24, 410, 232, 56, i === 2 ? "Contact us" : "Start", { bg: i === 1 ? "#1e1e1e" : "#ffffff", stroke: "#1e1e1e", labelColor: i === 1 ? "#ffffff" : "#1e1e1e", size: 20 }));
+  });
+  return els;
+}
+const PINS = { id: "review", size: 22, items: [
+  { on: "fp-free", note: "Say \"per month\" under each price" },
+  { on: "fp-team", note: "Make Team the one we recommend" },
+  { on: "fp-business-cta", note: "Contact us, or show the price?" },
+] };
+
+// Docs you both edit: a doc open side by side, and lines the agent writes to the file landing in it.
+const DOC = `# Sign-in
+
+How people sign in to the shop, from the [sign-in options](?page=signup-flow) we drew.
+
+## Decisions
+
+- **Magic link** by email (option B).
+- **Google** as a second button.
+- Links last 15 minutes.
+
+## Open
+
+- What the email says.
+- Whether people stay signed in.
+`;
+const DOC_AGENT = DOC
+  .replace("- Links last 15 minutes.\n", "- Links last 15 minutes.\n- Remember the device for 30 days.\n")
+  .replace("- Whether people stay signed in.\n", "- The email: one line and the button, no logo.\n");
+
 // --- the run ---------------------------------------------------------------------------
 // `node docs/readme/stills.mjs` makes everything; name some to make only those:
-// hero, how-it-works, kanban, story-map, roadmap, data-model, prototype, deck, mermaid, architecture, refactor-plan.
-const ALL = ["hero", "how-it-works", "kanban", "story-map", "roadmap", "data-model", "prototype", "deck", "mermaid", "architecture", "refactor-plan"];
+// hero, how-it-works, kanban, story-map, roadmap, data-model, prototype, deck, mermaid, architecture, refactor-plan,
+// and What you get's: feature-draws, feature-answer, feature-checks, feature-look, feature-components, feature-share,
+// feature-docs, feature-looks, feature-pins.
+const FEATURES = ["feature-draws", "feature-answer", "feature-checks", "feature-look", "feature-components", "feature-share", "feature-docs", "feature-looks", "feature-pins"];
+const ALL = ["hero", "how-it-works", "kanban", "story-map", "roadmap", "data-model", "prototype", "deck", "mermaid", "architecture", "refactor-plan", ...FEATURES];
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 for (const w of wanted) if (!ALL.includes(w)) throw new Error(`unknown still "${w}"; one of ${ALL.join(", ")}`);
-const pageOf = (w) => (w === "hero" ? "signup-flow" : w);
+const pageOf = (w) => (w === "hero" ? "signup-flow" : w === "feature-docs" ? "signup.md" : w);
 const GALLERY_RATIO = 16 / 10; // every gallery image the same shape, so the README's table lines up
+const FEATURE_RATIO = 2; // What you get's pictures: wider, as the drawings are, so they fill their cells
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const out = (n) => path.join(HERE, n);
@@ -397,7 +584,7 @@ try {
   // Insert UI-kit widgets ([item, x, y, frame, id prefix, {old text: new text}, extra edits by old text]), then relabel them.
   async function insertWidgets(page, list) {
     const inserted = list.map(([item, x, y, frame, id, texts, extra = {}]) => {
-      const r = obeya(["library", "insert", `ecommerce-mobile-ui/${item}`, page, "--at", `${x},${y}`, "--frame", frame, "--id", id]);
+      const r = obeya(["library", "insert", `ecommerce-mobile-ui/${item}`, page, "--at", `${x},${y}`, ...(frame ? ["--frame", frame] : []), "--id", id]);
       return [r.ids ?? r.created, texts, extra];
     });
     await sleep(800);
@@ -415,7 +602,7 @@ try {
     patch(page, { elements: edits });
     await sleep(800);
   }
-  const exportPng = (name, scale = 2) => obeya(["export", name, "--format", "png", "--scale", String(scale), "--padding", "40", "--out", out(`${name}.png`)]);
+  const exportPng = (name, scale = 2, padding = 40) => obeya(["export", name, "--format", "png", "--scale", String(scale), "--padding", String(padding), "--out", out(`${name}.png`)]);
 
   if (wanted.includes("hero")) {
     // Hero: the loop with wait. The agent asks on the page; the person circles an option,
@@ -570,6 +757,61 @@ try {
     await sleep(800);
     exportPng("architecture");
     await fitTo(out("architecture.png"), GALLERY_RATIO);
+  }
+
+  const fitted = async (name) => { exportPng(name, 2, 24); await fitTo(out(`${name}.png`), FEATURE_RATIO); };
+  const featureSimple = { "feature-draws": featureDraws, "feature-answer": featureAnswer, "feature-checks": featureChecks, "feature-look": featureLook, "feature-share": featureShare };
+  for (const name of Object.keys(featureSimple).filter((n) => wanted.includes(n))) {
+    await open(name);
+    patch(name, { skeleton: featureSimple[name]() });
+    await sleep(800);
+    await fitted(name);
+  }
+
+  if (wanted.includes("feature-components")) {
+    await open("feature-components");
+    patch("feature-components", { skeleton: featureComponentsPanel() });
+    ["lambda", "dynamodb", "sqs"].forEach((item, k) => obeya(["library", "insert", `aws-serverless-icons-v2/${item}`, "feature-components", "--at", `${660 + k * 280},140`, "--id", `fcp-i${k}`]));
+    await insertWidgets("feature-components", [
+      ["textfield", 660, 400, null, "fcp-w0", { TextBox: "Email", Placeholder: "you@example.com" }],
+      ["toggle-on", 1120, 420, null, "fcp-w1", { "Toggle-on": "Remember me" }],
+    ]);
+    await fitted("feature-components");
+  }
+
+  if (wanted.includes("feature-looks")) {
+    await open("feature-looks");
+    patch("feature-looks", { skeleton: featureLooksFrame() });
+    LOOKS3.forEach((l, k) => patch("feature-looks", { skeleton: signIn(k, l) }, l));
+    await sleep(1500);
+    await fitted("feature-looks");
+  }
+
+  if (wanted.includes("feature-pins")) {
+    await open("feature-pins");
+    patch("feature-pins", { skeleton: featurePins(), pins: PINS });
+    await sleep(800);
+    await fitted("feature-pins");
+  }
+
+  if (wanted.includes("feature-docs")) {
+    // A doc in Edit, side by side; then the agent writes two lines to the file, and they land, tinted.
+    const file = path.join(HERE, "signup.md");
+    await tab.setViewportSize({ width: 1280, height: 640 }); // What you get's 2:1
+    fs.writeFileSync(file, DOC);
+    await open("signup.md");
+    await tab.waitForFunction(() => document.body.classList.contains("doc-open"), null, { timeout: 30000 });
+    await tab.click("[data-testid=doc-mode]");
+    await tab.waitForFunction(() => document.querySelector("#doc .CodeMirror")?.CodeMirror && document.querySelector("#doc [data-testid=doc-preview]"), null, { timeout: 60000 });
+    await sleep(1500);
+    fs.writeFileSync(file, DOC_AGENT);
+    await tab.waitForFunction(() => document.querySelector("#doc .CodeMirror .doc-merged") && document.querySelector("#doc .markdown .doc-changed"), null, { timeout: 15000 });
+    await tab.addStyleTag({ content: "#doc .doc-merged, #doc .doc-changed, #doc tr.doc-changed > td { animation-play-state: paused !important; }" });
+    await tab.mouse.move(5, 5);
+    await sleep(300);
+    await tab.screenshot({ path: out("feature-docs.png") });
+    fs.writeFileSync(file, DOC); // the page stays as it started
+    await tab.setViewportSize({ width: 1280, height: 800 });
   }
 
   console.log(JSON.stringify({ made: wanted }));

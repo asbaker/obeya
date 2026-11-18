@@ -19,6 +19,7 @@ export const HINTS = {
   unknown_page: "pick one of error.pages (the nearest names), or check obeya pages",
   bad_page_name: "page names are parts joined by /, without \\ : * ? \" < > | and no part starting with .",
   page_exists: "pick another name",
+  doc_changed: "the doc changed on disk; read it again and redo the edit on that text",
   page_gone: "the page was deleted or renamed; check obeya pages",
   last_page: "make another page first",
   unknown_element: "re-read ids with obeya describe or get",
@@ -30,6 +31,7 @@ export const HINTS = {
   invalid_image: "check the path; images are PNG, JPEG, GIF, WebP or SVG",
   image_too_large: "shrink the image under 4 MB, then retry",
   invalid_mermaid: "fix the mermaid syntax the message names; nothing was changed",
+  unknown_style: "use sketch, clean or hifi, or leave --style out; nothing was changed",
 
   // the canvas tab
   canvas_outdated: "ask the person to reload the canvas tab, then retry; nothing was changed",

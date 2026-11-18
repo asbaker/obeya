@@ -46,5 +46,5 @@ End with this (in your own words is fine):
 
 ## Updating and removing
 
-- Update: `npm update -g obeya` and `npx skills update obeya`.
+- Update: `npm update -g obeya` and `npx skills update obeya`. When a newer version is out, `obeya --skill` and `obeya status` say so (checked once a day against the npm registry, remembered in the user cache as `update.json`; `OBEYA_NO_UPDATE_CHECK=1` turns it off). After updating, the next command restarts a server still running the old version.
 - Remove: `npx skills remove obeya -g` and `npm uninstall -g obeya`. Pages are plain `.excalidraw` files and stay where the person put them. Each folder's port is remembered in obeya's user cache (`ports.json`); deleting that file is harmless.

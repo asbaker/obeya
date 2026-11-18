@@ -39,7 +39,6 @@ export const nextFrame = () =>
 export const relatedTo = (ids) => (e) =>
   ids.has(e.id) || ids.has(e.containerId) || ids.has(e.startBinding?.elementId) || ids.has(e.endBinding?.elementId);
 
-// --- 2a: jobs that change the editor, one at a time ------------------------------
 // Agent patches, live updates and opening a page run here in turn, so one can
 // never hand the editor back while another is still applying. A job takes the
 // editor with hold.enter(PATCH | REMOTE | OPEN) right before it changes the
@@ -65,11 +64,10 @@ export function editorJob(fn) {
   return job;
 }
 
-// --- live updates from other tabs and from agent patches applied elsewhere -----
 export const applyRemote = (msg) => editorJob((hold) => applyRemoteNow(msg, hold));
 async function applyRemoteNow({ page, elements, files }, hold) {
   if (page !== S.currentPage || !S.api) return;
-  if (files && Object.keys(files).length) S.api.addFiles(Object.values(files)); // images from elsewhere
+  if (files && Object.keys(files).length) S.api.addFiles(Object.values(files));
   const local = new Map(S.api.getSceneElementsIncludingDeleted().map((e) => [e.id, e]));
   const won = elements.filter((e) => wins(e, local.get(e.id)));
   if (!won.length) return;
@@ -85,7 +83,6 @@ async function applyRemoteNow({ page, elements, files }, hold) {
   S.remoteApplied++;
 }
 
-// --- 2b: the person's edits -> server -----------------------------------------------
 let quietTimer = null;
 let current = Promise.resolve(); // the save in flight
 let nextExtra; // fetch options for the next save (keepalive when the tab closes)
@@ -107,7 +104,7 @@ export function onChange() {
   saving.send("EDIT");
 }
 
-// The connection (machine 1 will own this): offline, edits wait in this tab.
+// Offline, edits wait in this tab.
 export function setOnline(on) {
   S.connected = on;
   if (!on && saving.can("OFFLINE")) saving.send("OFFLINE");

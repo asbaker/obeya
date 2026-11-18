@@ -16,9 +16,6 @@ before(async () => (cat = await startCatalogue()));
 after(() => cat.close());
 const envWith = (extra = {}) => ({ OBEYA_CACHE: tmpDir("xl-cache-"), OBEYA_CATALOGUE_URL: cat.url, ...extra });
 
-// ---------------------------------------------------------------------------
-// Pure parts
-
 test("parse v2 and v1 libraries; item ids are name slugs, de-duplicated", () => {
   const v2 = parseLibrary({ type: "excalidrawlib", version: 2, libraryItems: [
     { name: "Button", elements: [rect("a", 0, 0)] },
@@ -106,9 +103,6 @@ test("only https, or http from this machine", () => {
   assert.ok(!allowedUrl("not a url"));
 });
 
-// ---------------------------------------------------------------------------
-// Cache and downloads, against a local stand-in for the catalogue
-
 test("catalogue: downloaded once a day, stale copy when offline, network_error with none", async () => {
   const env = envWith();
   const first = cat.hits.length;
@@ -183,9 +177,6 @@ test("add from a local file records only its name; from a URL; clashes need --as
   assert.ok(!removeLibrary(env, "team-kit"));
   assert.deepEqual(listCached(env).map((m) => m.id), ["shapes", "zeta-shapes"]);
 });
-
-// ---------------------------------------------------------------------------
-// The CLI surface (no browser): envelopes and error codes
 
 test("cli: search, show (downloads), list, add, remove; nothing starts a server", async () => {
   const env = { ...process.env, ...envWith(), OBEYA_DIR: path.join(tmpDir(), "canvas"), OBEYA_PORT: "1" };

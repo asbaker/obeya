@@ -33,7 +33,6 @@ export const normalizePageName = (name) => (typeof name === "string" ? name.norm
 export const folderOf = (name) => (name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : "");
 /** "project-a/overview" -> "overview". */
 export const baseName = (name) => name.slice(name.lastIndexOf("/") + 1);
-/** Join a folder ("" for the top level) and a name. */
 export const joinName = (folder, name) => (folder ? `${folder}/${name}` : name);
 
 /** Every folder that holds a page, with its parents: ["project-a", "project-b", "project-b/research"]. */

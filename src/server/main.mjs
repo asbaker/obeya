@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-// obeya server: a local-only bridge between the Excalidraw page (the
-// person) and the CLI (the agent). No dependencies. Binds to 127.0.0.1 only.
-//
 //   node src/server/main.mjs --dir <pages dir> --port <n> [--idle-timeout <minutes>]
-//
-// Usually started by the CLI, not by hand. The server is the only writer of
-// .excalidraw files, and it writes inside --dir only.
+// Started by the CLI. Binds to 127.0.0.1 only; the only writer of .excalidraw
+// files, and only inside --dir.
 
 import http from "node:http";
 import fs from "node:fs";
@@ -24,6 +20,7 @@ import { watchPages } from "./watch.mjs";
 import { pageRoutes } from "./routes/pages.mjs";
 import { renderRoutes } from "./routes/render.mjs";
 import { infoRoutes } from "./routes/info.mjs";
+import { checkForUpdate, pendingUpdate, UPDATE_TTL_MS } from "../lib/update.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(here, "..");
@@ -41,17 +38,27 @@ const HOST = "127.0.0.1";
 const IDLE_MINUTES = Number(opts["idle-timeout"] ?? DEFAULT_IDLE_MINUTES);
 const EXIT_PORT_IN_USE = 3; // the CLI maps this to error code port_in_use
 // Pure modules the page shares with the CLI and server, served from /lib/ (an allowlist, never a path).
-const PAGE_MODULES = new Set(["layout", "geometry", "merge", "names", "machine", "page-machines"]);
+const PAGE_MODULES = new Set(["layout", "geometry", "merge", "names", "machine", "page-machines", "fonts", "docs", "docmerge", "docsync", "pins"]);
 
 // Change logs, cursors and bands from before the rename carry over.
 if (migrateSidecar(DIR)) console.log(`${new Date().toISOString()} moved .excalidraw-local/ to .obeya/`);
 
 let lastActivity = Date.now();
 const store = new PageStore(DIR, { onNewPage: () => pages.announce() });
-const tabs = createTabs({ store, dir: DIR, onClose: () => (lastActivity = Date.now()) });
+const tabs = createTabs({ store, dir: DIR, version: VERSION, onClose: () => (lastActivity = Date.now()) });
 const pages = watchPages({ dir: DIR, store, broadcast: tabs.broadcast });
 const waits = createWaits({ store, tabs, onEnd: () => (lastActivity = Date.now()) });
-tabs.greet(() => [["waits", { waits: waits.list() }]]); // a tab that connects learns who is waiting
+// A tab that connects learns who is waiting, and whether a newer obeya is out.
+tabs.greet(() => [["waits", { waits: waits.list() }], ["update", { update: pendingUpdate(VERSION) }]]);
+
+// Is a newer obeya out? Asked at start, then once a day; open tabs hear the answer.
+async function checkUpdate() {
+  const before = JSON.stringify(pendingUpdate(VERSION));
+  await checkForUpdate();
+  const now = pendingUpdate(VERSION);
+  if (JSON.stringify(now) !== before) tabs.broadcast("update", { update: now });
+}
+setInterval(() => checkUpdate().catch(() => {}), UPDATE_TTL_MS).unref();
 
 const route = router([
   ...infoRoutes({ tabs, dir: DIR, port: PORT, version: VERSION, idleMinutes: IDLE_MINUTES, shutdown: () => shutdown() }),
@@ -77,6 +84,9 @@ const server = http.createServer(async (req, res) => {
         const type = { mjs: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", svg: "image/svg+xml", png: "image/png" }[own[2]];
         return sendFile(res, path.join(SRC, "page", `${own[1]}.${own[2]}`), type);
       }
+      // The fonts obeya ships (src/page/fonts): a fixed shape of name, never a free path.
+      const font = /^\/page\/fonts\/([a-z][a-z-]*)\.woff2$/.exec(url.pathname)?.[1];
+      if (font && fs.existsSync(path.join(SRC, "page", "fonts", `${font}.woff2`))) return sendFile(res, path.join(SRC, "page", "fonts", `${font}.woff2`), "font/woff2");
       // Browsers ask for /favicon.ico on their own (and remember the answer): the logo.
       if (url.pathname === "/favicon.ico") return sendFile(res, path.join(SRC, "page", "favicon.png"), "image/png");
       if (url.pathname === "/events") return tabs.connect(req, res, url);
@@ -142,4 +152,5 @@ server.listen(PORT, HOST, () => {
   // Versions before 0.1 kept a session token here; don't leave one behind.
   fs.rmSync(legacyTokenFile(DIR, PORT), { force: true });
   console.log(`${new Date().toISOString()} obeya ${VERSION}: http://${HOST}:${PORT} (pages in ${DIR})`);
+  checkUpdate().catch(() => {});
 });

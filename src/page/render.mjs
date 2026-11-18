@@ -1,5 +1,4 @@
-// Work a tab does for the CLI: rendering images and library contact sheets,
-// pointing the view (show), and the component libraries for the sidebar.
+// Work a tab does for the CLI: images, contact sheets, show, the library sidebar.
 import { exportScene, restoreElements } from "./deps.mjs";
 import { RENDERER, S } from "./state.mjs";
 import { answer, fail, getJSON } from "./server-link.mjs";
@@ -153,7 +152,6 @@ export async function handleShow({ reqId, page, frame }) {
   }
 }
 
-// --- bundled component libraries in the library sidebar ---------------------------
 export async function loadLibraries() {
   if (RENDERER || !S.api.updateLibrary) return;
   try {

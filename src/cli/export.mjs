@@ -1,4 +1,3 @@
-// `export`: assemble images or a deck (lib/exporter.mjs) and write the files.
 import fs from "node:fs";
 import path from "node:path";
 import { buildExport, ExportError } from "../lib/exporter.mjs";
@@ -46,7 +45,6 @@ export async function runExport(plan, client, note, env, cwd) {
   return { width: result.file.width, height: result.file.height };
 }
 
-/** The image options `export` passes to the renderer. */
 const imageOptions = (flags) => ({
   scale: flags.scale ? Number(flags.scale) : 1,
   embedScene: Boolean(flags["embed-scene"]),

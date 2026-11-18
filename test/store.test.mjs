@@ -125,8 +125,6 @@ test("pages are served and saved in stacking (fractional index) order", async ()
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "p.excalidraw"), "utf8")).elements.map((e) => e.id), ["bottom", "top"]);
 });
 
-// --- folders ---------------------------------------------------------------
-
 const scene = JSON.stringify({ type: "excalidraw", version: 2, elements: [], appState: {}, files: {} });
 const put = (dir, rel) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), scene); };
 

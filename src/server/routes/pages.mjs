@@ -1,5 +1,3 @@
-// /api/pages: the page list, reading a page, the person's edits (sync), agent
-// patches, the change log, rename, bands, and pointing the person's view.
 import { ApiError, json, readJSON, requireElement, requirePage } from "../http.mjs";
 import { brief, resolveChanges } from "../../lib/report.mjs";
 import { involving, lint } from "../../lib/lint.mjs";
@@ -7,6 +5,10 @@ import { LayoutError, validateLayout } from "../../lib/layout.mjs";
 import { normalizePageName } from "../../lib/names.mjs";
 import { fileProblem } from "../../lib/images.mjs";
 import { applyDefaults, defaultsProblem } from "../../lib/defaults.mjs";
+import { LookError, applyLook } from "../../lib/looks.mjs";
+import { pinIds, pinSetIds, pinsProblem } from "../../lib/pins.mjs";
+import { lockBackdrops } from "../../lib/backdrops.mjs";
+import { resolveFonts } from "../../lib/fonts.mjs";
 
 const PATCH_KEYS = ["skeleton", "elements", "delete", "toBack", "toFront", "layout"];
 
@@ -16,13 +18,26 @@ function validatePatch(body) {
   if (!ok || !PATCH_KEYS.every(arr)) {
     throw new ApiError(400, "invalid_patch", "a patch is {skeleton?: [], elements?: [], delete?: [], toBack?: [], toFront?: [], layout?: [], defaults?: {}}");
   }
-  const extra = Object.keys(body).filter((k) => !PATCH_KEYS.includes(k) && k !== "files" && k !== "defaults");
+  const extra = Object.keys(body).filter((k) => !PATCH_KEYS.includes(k) && !["files", "defaults", "style", "pins"].includes(k));
   if (extra.length) throw new ApiError(400, "invalid_patch", `unknown patch keys: ${extra.join(", ")}`);
   for (const e of [...(body.skeleton ?? []), ...(body.elements ?? [])]) {
     if (!e || typeof e !== "object") throw new ApiError(400, "invalid_patch", "patch entries must be objects");
   }
+  // The same id created twice in one patch: the second would silently replace
+  // the first. (Two edits of one id in `elements` are fine: they merge.)
+  const seen = new Set();
+  for (const e of body.skeleton ?? []) {
+    if (typeof e.id !== "string") continue;
+    if (seen.has(e.id)) throw new ApiError(400, "invalid_patch", `the id "${e.id}" appears twice in this patch; give each element its own id`);
+    seen.add(e.id);
+  }
+  const pinBad = pinsProblem(body.pins);
+  if (pinBad) throw new ApiError(400, "invalid_patch", pinBad);
   const bad = defaultsProblem(body.defaults);
   if (bad) throw new ApiError(400, "invalid_patch", bad);
+  // Fonts by name ("Inter") become Excalidraw's numbers before anything else sees them.
+  const font = resolveFonts(body);
+  if (font) throw new ApiError(400, "invalid_patch", font);
   for (const e of body.elements ?? []) {
     if (typeof e.id !== "string" || !e.id) throw new ApiError(400, "invalid_patch", "every entry in `elements` needs an `id`");
   }
@@ -45,7 +60,6 @@ function validatePatch(body) {
   }
 }
 
-/** @param {{store: any, tabs: any, pages: any}} ctx */
 export function pageRoutes({ store, tabs, pages, waits }) {
   // Recent agent patches per page: a sync may report the editor's late layout
   // for them as the agent's (`layout`), but only for these elements and briefly.
@@ -65,6 +79,29 @@ export function pageRoutes({ store, tabs, pages, waits }) {
 
   return [
     ["GET", "/api/pages", ({ res }) => json(res, 200, { ...pages.info(), browsers: tabs.count("person") })],
+
+    // A markdown doc's text, for the tab to render read-only.
+    ["GET", "/api/docs/:doc", ({ res, params: { doc } }) => {
+      const text = store.doc(doc);
+      if (text === null) throw new ApiError(404, "unknown_page", `no doc "${doc}"`);
+      return json(res, 200, { text });
+    }],
+
+    // Save a doc edited in the tab: {text, base}, base being the text the tab
+    // started from. The file changed meanwhile: 409 doc_changed with its text,
+    // and the tab merges.
+    ["POST", "/api/docs/:doc", async ({ req, res, params: { doc } }) => {
+      const { text, base } = await readJSON(req);
+      if (typeof text !== "string" || typeof base !== "string") throw new ApiError(400, "invalid_json", "send {text, base}: both strings");
+      if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw new ApiError(413, "too_large", "a doc is at most 2 MB");
+      try {
+        store.writeDoc(doc, text, base);
+      } catch (err) {
+        if (err.code === "doc_changed") throw new ApiError(409, err.code, err.message, { text: err.text });
+        throw err;
+      }
+      return json(res, 200, {});
+    }],
 
     ["GET", "/api/pages/:page", ({ res, url, params: { page: name } }) => {
       // The page asks with ifMissing=empty when it opens a page the agent is about to create.
@@ -100,15 +137,40 @@ export function pageRoutes({ store, tabs, pages, waits }) {
       store.load(name);
       store.revive(name);
       // The page's base style for new skeleton elements; the editor never sees `defaults`.
+      // Live elements only: an id reused after a delete is a new element and gets the defaults.
+      const live = store.elements(name).filter((e) => !e.isDeleted);
+      const existing = new Set(live.map((e) => e.id));
+      // Pins become skeleton: the server numbers and places them; a set sent
+      // again replaces the old one.
+      if (body.pins) {
+        const known = new Set([...existing, ...(body.skeleton ?? []).map((e) => e?.id)]);
+        const unknown = body.pins.items.findIndex((it) => !known.has(it.on));
+        if (unknown >= 0) throw new ApiError(400, "invalid_patch", `pins.items[${unknown}]: no element "${body.pins.items[unknown].on}" on the page or in this patch`);
+        // Placed by the tab, after the patch's edits and layout have moved things.
+        const made = new Set(pinSetIds(body.pins));
+        const old = pinIds(live, body.pins.id ?? "pins");
+        body.delete = [...(body.delete ?? []), ...old.filter((id) => !made.has(id))];
+      }
       if (body.defaults) {
-        body.skeleton = applyDefaults(body.skeleton, body.defaults, new Set(store.elements(name).map((e) => e.id)));
+        body.skeleton = applyDefaults(body.skeleton, body.defaults, existing);
         delete body.defaults;
+      }
+      if (body.skeleton) lockBackdrops(body.skeleton, new Map(live.filter((e) => e.type === "frame").map((f) => [f.id, f])), existing);
+      // Under those, the look's medium (--style sketch|clean|hifi): strokes and fonts, never colours.
+      if (body.style !== undefined) {
+        try {
+          applyLook(body, body.style, existing);
+        } catch (err) {
+          if (err instanceof LookError) throw new ApiError(400, err.code, err.message);
+          throw err;
+        }
+        delete body.style;
       }
       // Every image needs its file: in this patch, or already on the page.
       const have = { ...(store.load(name).scene.files ?? {}), ...(body.files ?? {}) };
       const missing = [...(body.skeleton ?? []), ...(body.elements ?? [])].filter((e) => e.fileId && !have[e.fileId]).map((e) => e.id ?? e.fileId);
       if (missing.length) throw new ApiError(400, "invalid_patch", `image(s) without a file: ${missing.join(", ")}`);
-      const reply = await tabs.ask("agent-patch", { page: name, ...body }, { page: name, needs: body.layout?.length ? "layout" : undefined });
+      const reply = await tabs.ask("agent-patch", { page: name, ...body }, { page: name, needs: body.pins ? "pins" : body.layout?.length ? "layout" : undefined });
       const entries = store.merge(name, reply.elements, "agent");
       store.addFiles(name, body.files); // before the relay, which sends files with their images
       notePatch(name, reply.elements ?? []);
@@ -137,6 +199,12 @@ export function pageRoutes({ store, tabs, pages, waits }) {
 
     // Create an empty page now (the New page dialog): saved before anything is drawn.
     ["POST", "/api/pages/:page", ({ res, params: { page: name } }) => {
+      // A doc (the New page dialog's Kind: Doc): an empty markdown file.
+      if (name.endsWith(".md")) {
+        store.createDoc(name);
+        pages.announce();
+        return json(res, 201, { page: name });
+      }
       try {
         store.create(name);
       } catch (err) {
@@ -150,7 +218,20 @@ export function pageRoutes({ store, tabs, pages, waits }) {
     // Rename a page; open tabs follow. Links that still name the old page are
     // listed for the caller to update (with a normal patch).
     ["POST", "/api/pages/:page/rename", async ({ req, res, params: { page: name } }) => {
-      const to = normalizePageName((await readJSON(req)).to);
+      let to = normalizePageName((await readJSON(req)).to);
+      // A markdown doc: the file moves; links that name it are listed the same way.
+      if (name.endsWith(".md")) {
+        try {
+          to = store.renameDoc(name, to);
+        } catch (err) {
+          const status = { unknown_page: 404, page_exists: 409, bad_page_name: 400 }[err.code];
+          if (status) throw new ApiError(status, err.code, err.message);
+          throw err;
+        }
+        tabs.broadcast("page-renamed", { from: name, to });
+        pages.announce();
+        return json(res, 200, { from: name, to, staleLinks: store.linksTo(name) });
+      }
       try {
         store.rename(name, to);
       } catch (err) {
@@ -167,13 +248,27 @@ export function pageRoutes({ store, tabs, pages, waits }) {
 
     // Links on other pages that name this one (asked before deleting it).
     ["GET", "/api/pages/:page/links", ({ res, params: { page: name } }) => {
-      requirePage(store, name);
+      if (name.endsWith(".md")) {
+        if (!store.docExists(name)) throw new ApiError(404, "unknown_page", `no doc "${name}"`);
+      } else requirePage(store, name);
       return json(res, 200, { page: name, links: store.linksTo(name).filter((l) => l.page !== name) });
     }],
 
     // Delete a page (the canvas page's Rename or move dialog; no CLI command):
     // its files go to .obeya/.trash/, and tabs showing it open another page.
     ["DELETE", "/api/pages/:page", ({ res, params: { page: name } }) => {
+      if (name.endsWith(".md")) {
+        const staleLinks = store.linksTo(name);
+        try {
+          store.deleteDoc(name);
+        } catch (err) {
+          if (err.code === "unknown_page") throw new ApiError(404, err.code, err.message);
+          throw err;
+        }
+        tabs.broadcast("page-deleted", { page: name });
+        pages.announce();
+        return json(res, 200, { page: name, staleLinks });
+      }
       const staleLinks = store.linksTo(name).filter((l) => l.page !== name);
       try {
         store.delete(name);

@@ -18,11 +18,6 @@ export class UsageError extends Error {
 }
 
 
-/**
- * @param {string[]} argv  arguments after the script name
- * @param {Record<string,string|undefined>} env
- * @param {string} cwd
- */
 export function parseCli(argv, env = {}, cwd = process.cwd()) {
   let parsed;
   try {

@@ -4,6 +4,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+// Tests never touch the internet: servers they start (which inherit this env)
+// don't ask the npm registry for updates. test/update.test.mjs turns it back on
+// against a local stand-in.
+process.env.OBEYA_NO_UPDATE_CHECK = "1";
+
 export const tmpDir = (prefix = "xl-test-") => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
 const taken = new Set();

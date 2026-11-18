@@ -29,11 +29,17 @@ Sticky notes in a frame, a labelled box, and an arrow bound to both:
 
 ```json
 {"defaults": {"rectangle": {"backgroundColor": "#f8f9fa", "fillStyle": "solid", "roundness": {"type": 3}},
-              "label": {"fontSize": 16, "textAlign": "left"}},
+              "label": {"fontSize": 16, "textAlign": "left", "fontFamily": "Inter"}},
  "skeleton": [{"type": "rectangle", "id": "s1", "x": 40, "y": 150, "width": 250, "height": 110, "label": {"text": "Start"}}]}
 ```
 
 Keys are element types, `label` (labels) and `*` (everything). An element's own fields win, then its type's, then `*`. They apply to new elements only: re-applying a skeleton to reword a label keeps its style. Override them wherever the content asks for something different; they're a base, not a limit.
+
+Fonts by name in `fontFamily`: `Excalifont` (hand-drawn), `Nunito`, `Lilita One`, `Comic Shanns`, `Helvetica`, `Cascadia` (code), `Inter`, `Inter Bold`, `Source Serif`, `Barlow Condensed`, `Caveat` (neat handwriting).
+
+**A look's medium:** `obeya patch <page> --style sketch|clean|hifi` fills in strokes and fonts under your `defaults` (sketch: rough, Excalifont; clean: crisp, Helvetica; hifi: nothing). Colours stay yours (`--skill design`).
+
+Arrows and lines: give `points` relative to `x`/`y` (`"points": [[0, 0], [0, 60]]` goes straight down 60), with `width`/`height` matching; bind arrows with `start`/`end` instead when they join shapes. A label is its own text element: to recolour or resize one, edit it by its id (`get` shows it as the shape's label).
 
 Edits and deletes: `{"elements": [{"id": "n-email", "x": 40, "y": 220}, {"id": "n-sso", "customData": {"status": "done"}}], "delete": ["a-sso-api"]}`
 
@@ -45,7 +51,17 @@ Let the tool do the arithmetic: don't compute coordinates by hand. A guessed pos
 - `{"align": "left", "ids": ["a", "b"], "to": "c"}`: `left|right|top|bottom|centre-x|centre-y`; without `to`, to their combined box.
 - `{"distribute": "vertical", "ids": ["a", "b", "c"], "gap": 40}`: a fixed gap, or equal gaps between the ends without one.
 - `{"grid": ["n1", "n2", "n3", "n4"], "columns": 2, "gap": 24, "at": [100, 200]}`.
-- `{"stack": "above", "ids": ["card"], "ref": "column"}`: just above (or `below`) one element. Moving something onto a filled shape? Use `place` or `stack`, or it may end up hidden underneath.
+- `{"stack": "above", "ids": ["card"], "ref": "column"}`: drawing order, not position: draws `ids` just on top of (or `below`) `ref`. Moved something onto a filled shape? `place` brings it to the front; otherwise `stack` it above the shape, or it may be hidden underneath.
+
+## Numbered pins
+
+Review notes on a drawing, without coordinates: obeya numbers them, puts each pin on its element's top-right corner (where the patch's moves leave it) and lays the notes out beside the elements (`"notes": "below"` for rows underneath).
+
+```json
+{"pins": {"id": "review", "items": [{"on": "card-3", "note": "Too small to read"}, {"on": "n-api", "note": "Who owns this?"}]}}
+```
+
+Optional `color` (default pink) and `size` (the notes' text size; match the frame, `--skill design`). Send the same `id` again to replace the set, renumbered. Each pin carries `customData` `{pin, on}`, so `get` shows which element pin 3 is on.
 
 ## Make things move the way the person expects
 

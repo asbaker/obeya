@@ -1,12 +1,5 @@
-// obeya CLI: the agent's side of the canvas. Talks only to the local
-// server, and starts it in the background when it isn't running.
-//
-// Every command prints one compact JSON line on stdout:
-//   {"result": {...}}
-//   {"error": {"code": "...", "message": "...", "hint": "...", ...}}
-// or nothing, when a success has nothing to report (stop, show): exit 0 says it.
-// A result carries only what the agent acts on: no echo of its arguments, no
-// debugging fields, no prose that restates fields. test/responses.test.mjs keeps it so.
+// One compact JSON line per command ({result} or {error}), or nothing when a
+// success has nothing to report; test/responses.test.mjs holds each command's keys.
 // Exit codes: 0 ok, 1 error, 2 the person needs to act (open the link).
 
 
@@ -29,6 +22,7 @@ import { resolveImages } from "./images.mjs";
 import { officialRender, withRenderer } from "./render.mjs";
 import { runExport } from "./export.mjs";
 import { lib, notifyLibraries, runLibrary } from "./library.mjs";
+import { guideNotice, pendingUpdate } from "../lib/update.mjs";
 
 export { CliError };
 
@@ -41,8 +35,6 @@ const PERSON_ACTS = new Set(["no_canvas_open", "canvas_not_connected"]);
 /**
  * Run the CLI. Returns {stdout, stderr, code} so tests can call it in-process;
  * the bin script prints and exits.
- * @param {string[]} argv
- * @param {{env?: Record<string,string|undefined>, cwd?: string, stdin?: () => string, onStderr?: (line: string) => void}} [ctx]
  */
 export async function run(argv, ctx = {}) {
   const env = ctx.env ?? process.env;
@@ -64,11 +56,14 @@ export async function run(argv, ctx = {}) {
   }
 
   if (plan.skill) {
-    const text = guide(plan.topic);
+    let text = guide(plan.topic);
     if (text === null) {
       io.out.push(JSON.stringify({ error: errorBody("unknown_topic", `no topic "${plan.topic}"`, { topics: guide.topics() }) }));
       return done(1);
     }
+    // A newer obeya is out: two lines under the core's title, so the agent can tell the person.
+    const news = !plan.topic || plan.topic === "all" ? pendingUpdate(VERSION, env) : null;
+    if (news) text = text.replace(/^# obeya\n/m, (t) => `${t}\n${guideNotice(VERSION, news)}\n`);
     io.out.push(text);
     return done(0);
   }
@@ -137,7 +132,6 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
   const spec = lookup(cmd);
 
   // Read inputs before any side effect, so a bad patch never starts a server or opens a tab.
-  // Images: each `src` (a local file) becomes a fileId plus the file.
   const patch = cmd === "patch" ? resolveImages(readPatch(flags.file, cwd, stdin), cwd) : null;
   const mermaidText = cmd === "mermaid" ? readText(flags.file, cwd, stdin) : null;
   if (mermaidText !== null && !mermaidText.trim()) throw new CliError("invalid_argument", `--file ${flags.file} is empty`);
@@ -168,10 +162,13 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     }
     case "status": {
       const i = await client.info();
-      if (i?.foreign) return { running: false, url: client.base, portInUse: true };
-      if (!i) return { running: false, url: client.base };
+      // update only when a newer obeya is out: {to, headline}.
+      const u = pendingUpdate(VERSION, env);
+      const update = u ? { update: u } : {};
+      if (i?.foreign) return { running: false, url: client.base, portInUse: true, ...update };
+      if (!i) return { running: false, url: client.base, ...update };
       // sameDir only when false: another folder's server answered on this port.
-      return { running: true, url: client.base, browsers: i.browsers, ...(sameDir(i.dir, plan.dir) ? {} : { sameDir: false }) };
+      return { running: true, url: client.base, browsers: i.browsers, ...(sameDir(i.dir, plan.dir) ? {} : { sameDir: false }), ...update };
     }
     case "stop": {
       const i = await client.info();
@@ -231,7 +228,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     case "patch": {
       // Counts, not echoes: the agent knows the ids it sent. What it acts on is `warnings`;
       // what the editor did beyond the patch is in `changes --source agent --since <rev>`.
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, patch);
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, flags.style ? { ...patch, style: flags.style } : patch);
       return { rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, changed: r.changed.length, warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}) };
     }
     case "mermaid": {
@@ -247,7 +244,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const { skeleton, files, image } = mermaidPatch(converted, { prefix: flags.id, at, frame: where.frame });
       const old = diagramElements(scene.elements, flags.id).filter((e) => !(e.type === "text" && e.containerId)).map((e) => e.id);
       if (old.length) await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { delete: old });
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { skeleton, ...(Object.keys(files).length ? { files } : {}) });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { skeleton, ...(Object.keys(files).length ? { files } : {}), ...(flags.style ? { style: flags.style } : {}) });
       return {
         rev: r.rev, ...(r.createdPage ? { createdPage: true } : {}), created: r.created.length, removed: old.length,
         warnings: r.warnings, ...(r.warnings.length ? { fixes: fixes(r.warnings) } : {}), ...(image ? { image: true } : {}),
@@ -298,7 +295,7 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
       const prefix = flags.id ?? `${item.id.slice(0, 40)}-${Math.random().toString(36).slice(2, 6)}`;
       const [x, y] = flags.at.split(",").map(Number);
       const elements = instantiate(item, { at: [x, y], prefix, frame: flags.frame ?? null });
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { elements });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/patch`, { elements, ...(flags.style ? { style: flags.style } : {}) });
       // The ids, because the agent didn't choose them; the size is in `library show`.
       return { rev: r.rev, ids: elements.map((e) => e.id) };
     }

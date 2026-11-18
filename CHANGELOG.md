@@ -2,6 +2,34 @@
 
 What changed in each release of obeya. Versions follow [semver](https://semver.org); while obeya is 0.x, a minor release can change what a command prints, and says so under **Changed**.
 
+## [0.3.0] - 2026-11-17
+
+Drawings that look the part, and docs beside them. Your agent picks a look for who it's for, pins numbered review notes, uses new fonts, and writes Markdown docs you can edit in the tab. obeya now also tells you when a newer version is out. Update both: `npm update -g obeya` and `npx skills update obeya`.
+
+### Added
+
+- Markdown docs: `.md` files in the pages folder show in the page picker and open in the tab, linked both ways with drawings (`?page=<doc.md>#<heading>`, GitHub's heading anchors). Edit (or Cmd/Ctrl+E) opens an editor with a preview side by side; your edits save as you type. When your agent writes the file, its lines merge into the editor and light up; if you both changed the same lines, it asks Load theirs or Keep mine. "+ New doc" in the picker, and a Kind choice (Drawing or Doc) in New page.
+- Looks: `--style sketch|clean|hifi` on `patch`, `mermaid` and `library insert` puts down a look's strokes and fonts under the patch's own `defaults`; colours stay the agent's. `--skill design`, `--skill sketch`, `--skill clean` and `--skill hifi` tell the agent how each look should read; it picks one for the audience (rough for a working session, hifi for a sign-off).
+- Numbered pins: a `pins` key in a patch turns review notes into numbered pins on their elements' corners, with the notes laid out beside them, so the person can answer "2: yes". Sending the same `id` again replaces the set.
+- Fonts: Inter, Inter Bold, Source Serif, Barlow Condensed and Caveat ship with obeya. Patches name fonts in `fontFamily` (`"Inter"`) instead of Excalidraw's numbers.
+- `--skill components`: the parts drawings are made of.
+- Update notices: once a day obeya asks the npm registry for its latest version (nothing about you is sent; `OBEYA_NO_UPDATE_CHECK=1` turns it off). When a newer one is out, `obeya --skill` opens with it, and the canvas shows a dot on the menu and the headline, the update command and a release-notes link in About obeya. After you update, the next command replaces a server still running the old version, and open tabs reload.
+
+### Changed
+
+- `obeya status` may include `update: {to, headline}` (only when a newer obeya is out).
+- A patch that creates the same id twice is refused.
+- A new shape that fills its frame is locked as the frame's background, so dragging what's on top doesn't move it.
+- New error codes: `unknown_style`, `doc_changed`.
+
+### Fixed
+
+- Dark mode: obeya's dialogs (pages, new page, rename, export, About) stayed light; they now follow Excalidraw's theme, and the theme you chose is kept across reloads.
+- A new element placed only by layout (no `x`/`y`) ended up without a position.
+- Rewording text, the stacking of a redrawn frame, and deletes lost after a crash.
+- `lint`'s contrast check now sees colours with transparency and what shows through a clear box.
+- The guide said `stack` moves things; it only sets what's drawn on top.
+
 ## [0.2.1] - 2026-11-13
 
 Fixes for `obeya wait`. Update both: `npm update -g obeya` and `npx skills update obeya`.
@@ -61,5 +89,7 @@ First release.
 - New and delete pages from the browser. Files changed on disk show up without a reload. Tabs reconnect after a server restart.
 - The skill (`npx skills add asbaker/obeya`), `obeya --skill`, and an `INSTALL.md` an agent can follow.
 
+[0.3.0]: https://github.com/asbaker/obeya/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/asbaker/obeya/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/asbaker/obeya/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/asbaker/obeya/releases/tag/v0.1.0

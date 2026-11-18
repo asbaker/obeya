@@ -1,5 +1,3 @@
-// HTTP plumbing for the server: errors, JSON bodies, static files, and a small
-// route table.
 import fs from "node:fs";
 import { nearestNames } from "../lib/names.mjs";
 

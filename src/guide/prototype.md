@@ -5,6 +5,8 @@ Frames act as artboards. Set an element's `link` to jump between them:
 - `?element=<frame-id>`: a frame on the same page;
 - `?page=<page>&element=<frame-id>`: a frame on another page (encode a `/` in the name as `%2F`); `?page=<page>` for the page itself.
 
+- `?page=<folder%2Fdoc.md>#<heading>`: a markdown doc, at a heading (GitHub's anchors: lower case, spaces to `-`, punctuation dropped: `## 3 Requirements` is `#3-requirements`). In a doc, link a drawing the same way (`[the plan](?page=v0.3%2Fspec&element=f-does)`), another doc by its path (`notes.md#plan`), a heading by `#plan`.
+
 Always write links relative like these, never with `http://127.0.0.1:<port>`: the port belongs to the pages folder and can change, and a relative link keeps working. For a clickable area over text or a group (a table row, a card), add a transparent rectangle with the `link`: while presenting, a click anywhere inside a linked element's box follows it.
 
 The person clicks **Present** (top right, or Shift+Alt+P) to show frames one at a time with a laser pointer: ← → or the ‹ › controls step through them in slide order, Esc stops. Slide order: a numeric prefix in the frame name (`01 Login`, `02 Home`), then `customData.order`, then position. Name frames with numeric prefixes when you build a flow. `obeya show <page> --frame <id>` points the person's view at a frame.

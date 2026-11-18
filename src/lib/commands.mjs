@@ -23,7 +23,6 @@ export const GLOBAL_FLAGS = ["dir", "port", "no-open", "idle-timeout", "help"];
  * @property {string[]} [details]
  */
 
-/** @type {Record<string, Command>} */
 export const COMMANDS = {
   serve: {
     usage: "serve",
@@ -93,23 +92,24 @@ export const COMMANDS = {
     },
   },
   patch: {
-    usage: "patch <page> --file <path|->",
+    usage: "patch <page> --file <path|-> [--style sketch|clean|hifi]",
     summary: "Apply {skeleton?, elements?, delete?, toBack?, toFront?, layout?, defaults?} through the live editor",
     page: true,
-    flags: ["file"],
+    flags: ["file", "style"],
     required: ["file"],
     live: true,
     mutating: true,
     details: [
       "--file - reads stdin. Creates the page if needed; one undo step. Prints {rev, created, changed, warnings, fixes}.",
+      "--style sketch|clean|hifi: the look's medium (strokes, fonts) under the patch's own defaults; hifi sets nothing.",
       "The patch format: obeya --skill patch.",
     ],
   },
   mermaid: {
-    usage: "mermaid <page> --file <path.mmd|-> --id <prefix> [--frame <id>] [--at <x,y>]",
+    usage: "mermaid <page> --file <path.mmd|-> --id <prefix> [--frame <id>] [--at <x,y>] [--style sketch|clean|hifi]",
     summary: "Draw a Mermaid diagram as editable elements; run it again to replace it from the .mmd",
     page: true,
-    flags: ["file", "id", "frame", "at"],
+    flags: ["file", "id", "frame", "at", "style"],
     required: ["file", "id"],
     live: true,
     mutating: true,
@@ -251,12 +251,12 @@ export const COMMANDS = {
         mutating: true,
       },
       insert: {
-        usage: "library insert <lib>/<item> <page> --at <x,y> [--frame <id>] [--id <prefix>]",
+        usage: "library insert <lib>/<item> <page> --at <x,y> [--frame <id>] [--id <prefix>] [--style sketch|clean|hifi]",
         summary: "Insert a copy of an item with its top-left at x,y; ids are <prefix>-1, <prefix>-2, …",
         page: true,
         args: ["item"],
         argsFirst: true,
-        flags: ["at", "frame", "id"],
+        flags: ["at", "frame", "id", "style"],
         required: ["at"],
         live: true,
         mutating: true,
@@ -343,6 +343,7 @@ export const OPTION_TYPES = {
   port: { type: "string" },
   "no-open": { type: "boolean" },
   "idle-timeout": { type: "string" },
+  style: { type: "string" },
   help: { type: "boolean", short: "h" },
   skill: { type: "boolean" },
   version: { type: "boolean", short: "V" },

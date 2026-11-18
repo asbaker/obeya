@@ -19,7 +19,6 @@ function itemIds(items) {
   });
 }
 
-/** Is this parsed JSON an Excalidraw library? */
 export const isLibrary = (json) =>
   json && typeof json === "object" && json.type === "excalidrawlib" && (Array.isArray(json.libraryItems) || Array.isArray(json.library));
 
@@ -30,7 +29,6 @@ export function parseLibrary(json) {
   return raw.map((it, i) => ({ id: ids[i], name: it.name?.trim() || null, elements: (it.elements ?? []).filter((e) => !e.isDeleted) }));
 }
 
-/** Item size in scene units. */
 export function itemSize(item) {
   const bs = item.elements.filter((e) => !(e.type === "text" && e.containerId)).map(bounds);
   if (!bs.length) return { w: 0, h: 0 };
@@ -40,8 +38,6 @@ export function itemSize(item) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// The public catalogue
 
 const baseName = (source) => source.split("/").pop().replace(/\.excalidrawlib$/, "");
 const author = (source) => source.split("/")[0];
@@ -101,8 +97,6 @@ export function searchCatalogue(entries, query, limit = 20) {
   return scored.slice(0, limit).map(({ e }) => e);
 }
 
-// ---------------------------------------------------------------------------
-// Items
 
 /** Find "<lib>/<item>" in a loaded library. Throws {code: "unknown_library_item"} with near matches. */
 export function findItem(lib, itemId) {
@@ -119,8 +113,6 @@ export function findItem(lib, itemId) {
  * A copy of `item` placed with its top-left at `at`, ids `<prefix>-1…`,
  * groups `<prefix>-g1…`, and every internal reference (bound text, bindings,
  * groups, frames) remapped. Elements get `frame` as their frame.
- * @param {{elements: any[]}} item
- * @param {{at: [number, number], prefix: string, frame?: string|null, nonce?: () => number}} opts
  */
 export function instantiate(item, { at, prefix, frame = null, nonce = () => Math.floor(Math.random() * 2 ** 31) }) {
   const els = item.elements.filter((e) => !e.isDeleted);
@@ -158,7 +150,6 @@ export function sidebarItems(libs) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Contact sheet: every item in a labelled grid, for an agent to look at.
 
 export const SHEET = { columns: 6, cellW: 220, cellH: 190, art: 160, perSheet: 48 };

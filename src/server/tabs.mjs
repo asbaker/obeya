@@ -1,5 +1,3 @@
-// The browser channel: connected tabs on server-sent events, and requests the
-// server makes of a tab (an agent patch, a render) with their answers.
 import { ApiError } from "./http.mjs";
 import { validPageName } from "../lib/names.mjs";
 
@@ -19,9 +17,10 @@ const RETRY_MS = 1000;
  * @param {object} o
  * @param {import("../lib/store.mjs").PageStore} o.store
  * @param {string} o.dir         sent in `hello`, so a reconnecting tab notices the port serves another folder
+ * @param {string} [o.version]   sent in `hello`, so a tab from an older server reloads its code
  * @param {() => void} o.onClose  a tab went away (idle time counts from then)
  */
-export function createTabs({ store, dir, onClose }) {
+export function createTabs({ store, dir, version, onClose }) {
   // Connected tabs: id -> {res, page, lastUsed, kind, caps}. Agent requests go
   // to ONE tab, the one the person used last; the other tabs get live updates.
   // kind "renderer" is a headless Chrome the CLI starts for exports: it may
@@ -112,7 +111,7 @@ export function createTabs({ store, dir, onClose }) {
     const caps = new Set((url.searchParams.get("caps") ?? "").split(",").filter(Boolean));
     tabs.set(id, { res, page: page && validPageName(page) ? page : null, lastUsed: Date.now(), kind, caps });
     res.write(`retry: ${RETRY_MS}\n\n`);
-    send(res, "hello", { tab: id, dir });
+    send(res, "hello", { tab: id, dir, version });
     for (const [event, data] of greeting()) send(res, event, data);
     if (kind === "person") parkExtra(id);
     req.on("close", () => {

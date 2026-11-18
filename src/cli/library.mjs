@@ -1,5 +1,3 @@
-// The library commands: search, list, add, remove, show (with contact
-// sheets), and helpers `library insert` shares.
 import fs from "node:fs";
 import path from "node:path";
 import { itemSize, sheetFile, sheetPages, SHEET } from "../lib/library.mjs";
@@ -9,7 +7,6 @@ import { sameDir } from "../lib/paths.mjs";
 import { CliError } from "./client.mjs";
 import { withRenderer } from "./render.mjs";
 
-/** Library errors carry their own codes; surface them as CLI errors. */
 export async function lib(fn) {
   try {
     return await fn();

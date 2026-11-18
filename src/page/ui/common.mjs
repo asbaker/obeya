@@ -1,4 +1,3 @@
-// Small shared UI pieces: Excalidraw's toast, and closing a modal from its backdrop.
 import { RENDERER, S } from "../state.mjs";
 
 // Short messages in Excalidraw's own toast: errors, the connection, the agent's changes.

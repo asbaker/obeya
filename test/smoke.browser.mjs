@@ -38,7 +38,7 @@ try {
 } catch {}
 const skip = !CHROME ? "no Chrome or Chromium found (set CHROME_PATH)" : !chromium ? "playwright-core not installed (npm install)" : false;
 
-const S = {}; // shared state
+const S = {};
 
 /** Run the real CLI binary. */
 function cli(args, { stdin } = {}) {
@@ -119,7 +119,6 @@ after(async () => {
   await S.catalogue?.close();
 });
 
-// --- helpers on the person's side ---------------------------------------------------
 const T = (fn, ...args) => S.page.evaluate(([f, a]) => window.obeyaTest[f](...a), [fn, args]);
 const el = async (id) => (await T("elements")).find((e) => e.id === id);
 const client = (x, y) => T("toClient", x, y);
@@ -472,7 +471,6 @@ test("concurrency: the person drags while agent patches land; nothing is misattr
   })();
   await Promise.all([person, agent]);
 
-  // Let the last sync land, then compare.
   await sleep(1200);
   const all = (await cli(["changes", "board", "--since", String(start), "--source", "all"])).json.result.changes;
   const user = all.filter((c) => c.source === "user");
@@ -799,7 +797,7 @@ test("pages: the picker, files added outside the server, rename from the menu", 
   await until(async () => (await pillCount()) === 2, { what: "a file added on disk appears", timeout: 5000 });
   await page.keyboard.press("ControlOrMeta+KeyO");
   await page.waitForSelector("[data-testid=page-picker]");
-  assert.deepEqual(await page.$$eval("[data-testid=picker-row]", (rows) => rows.map((r) => r.firstChild.firstChild.textContent)), ["board", "notes"]);
+  assert.deepEqual(await page.$$eval("[data-testid=picker-row]", (rows) => rows.map((r) => r.querySelector(".xl-base").textContent)), ["board", "notes"]);
   assert.deepEqual(await page.$$eval("[data-testid=picker-skipped]", (rows) => rows.map((r) => r.firstChild.textContent)), ["My|Diagram.excalidraw"]);
   // Search, then Enter opens the match.
   await page.keyboard.type("not");
@@ -1154,10 +1152,84 @@ test("branding: the tab title and favicon, the mark in the pill, About obeya", {
   await until(() => A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "dark theme" });
   pr = await present();
   assert.ok(pr.ratio >= 4.5 && pr.sameAsPill, `dark: ${JSON.stringify(pr)}`);
-  // Back to light for the other tests (choosing a theme may leave the menu open).
-  if (!(await A.getByText("Light mode").isVisible())) await A.click(".main-menu-trigger");
+  // Our dialogs follow it: the page picker turns dark, its text and inputs readable.
+  const picker = () => A.evaluate(() => {
+    const lum = (s) => { const [r, g, b] = s.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (fg, bg) => { const [a, c] = [lum(fg), lum(bg)].sort((x, y) => y - x); return (a + 0.05) / (c + 0.05); };
+    const m = getComputedStyle(document.querySelector("[data-testid=page-picker]"));
+    const i = getComputedStyle(document.querySelector("[data-testid=page-picker] input"));
+    return { bg: lum(m.backgroundColor), text: ratio(m.color, m.backgroundColor), input: ratio(i.color, i.backgroundColor), inputBg: lum(i.backgroundColor) };
+  });
+  if (await A.getByText("Light mode").isVisible()) await A.keyboard.press("Escape");
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector("[data-testid=page-picker]");
+  let pk = await picker();
+  assert.ok(pk.bg < 0.05 && pk.inputBg < 0.05 && pk.text >= 7 && pk.input >= 7, `dark picker: ${JSON.stringify(pk)}`);
+  await A.keyboard.press("Escape");
+  // The theme outlives a refresh.
+  await A.reload();
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready after reload", timeout: 60000 });
+  await until(() => A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "still dark after reload" });
+  // Back to light for the other tests; the picker is light again, and so is the next load.
+  await A.click(".main-menu-trigger");
   await A.getByText("Light mode").click();
   await until(() => A.evaluate(() => !document.querySelector(".excalidraw").classList.contains("theme--dark")), { what: "light theme again" });
+  if (await A.getByText("Dark mode").isVisible()) await A.keyboard.press("Escape");
+  await A.keyboard.press("ControlOrMeta+KeyO");
+  await A.waitForSelector("[data-testid=page-picker]");
+  pk = await picker();
+  assert.ok(pk.bg > 0.9 && pk.text >= 7, `light picker: ${JSON.stringify(pk)}`);
+  await A.keyboard.press("Escape");
+  await A.reload();
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready after reload", timeout: 60000 });
+  assert.equal(await A.evaluate(() => document.querySelector(".excalidraw").classList.contains("theme--dark")), false, "light after reload");
+  await A.close();
+});
+
+test("update notice: a dot on ☰ and a New version chip on About until About is opened; About's news box", { skip }, async () => {
+  const opened = await cli(["open", "board", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  // The server greets a tab with its news (none here: tests don't check); let that land first.
+  await until(() => A.evaluate(() => window.obeyaTest.connection() === "connected"), { what: "connected" });
+  await sleep(300);
+  await A.evaluate(() => localStorage.removeItem("obeya.updateSeen"));
+  const dot = () => A.evaluate(() => getComputedStyle(document.querySelector(".main-menu-trigger"), "::after").content !== "none");
+  // No news: no dot, no chip, About as before.
+  assert.equal(await dot(), false);
+  await A.evaluate(() => window.obeyaTest.setUpdate({ to: "99.0.0", headline: "Stages, pins, docs in the tab" }));
+  await until(dot, { what: "the dot on ☰" });
+  await A.click(".main-menu-trigger");
+  await A.waitForSelector("[data-testid=menu-news]");
+  assert.equal(await A.textContent("[data-testid=menu-news]"), "New version");
+  await A.click("[data-testid=menu-about]");
+  await A.waitForSelector("[data-testid=about-news]");
+  const news = await A.evaluate(() => {
+    const n = document.querySelector("[data-testid=about-news]");
+    return { text: n.textContent, link: n.querySelector("a").href, target: n.querySelector("a").target };
+  });
+  assert.match(news.text, /obeya 99\.0\.0 is out/);
+  assert.match(news.text, /Stages, pins, docs in the tab/);
+  assert.match(news.text, /npm update -g obeya && npx skills update obeya/);
+  assert.deepEqual([news.link, news.target], ["https://github.com/asbaker/obeya/releases/tag/v99.0.0", "_blank"]);
+  // Opening About clears the dot and the chip, and this browser remembers it.
+  await until(async () => !(await dot()), { what: "the dot clears" });
+  assert.equal(await A.evaluate(() => localStorage.getItem("obeya.updateSeen")), "99.0.0");
+  await A.keyboard.press("Escape");
+  await A.click(".main-menu-trigger");
+  await A.waitForSelector("[data-testid=menu-about]");
+  assert.equal(await A.$("[data-testid=menu-news]"), null);
+  await A.keyboard.press("Escape");
+  // A newer release brings them back.
+  await A.evaluate(() => window.obeyaTest.setUpdate({ to: "99.1.0" }));
+  await until(dot, { what: "the dot for the next release" });
+  // No news again: gone.
+  await A.evaluate(() => { window.obeyaTest.setUpdate(null); localStorage.removeItem("obeya.updateSeen"); });
+  await until(async () => !(await dot()), { what: "no news, no dot" });
   await A.close();
 });
 
@@ -1469,6 +1541,36 @@ test("re-applying a skeleton to reword a label keeps the element's frame, group,
   await A.close();
 });
 
+test("rewording a text through `elements` remeasures it: a label or free text isn't cut to its old width", { skip }, async () => {
+  const opened = await cli(["open", "reword", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "board");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p) => cli(["patch", "reword", "--file", "-"], { stdin: JSON.stringify(p) });
+  const all = async () => (await cli(["get", "reword", "--full"])).json.result.elements;
+  let r = await patch({ skeleton: [
+    { type: "rectangle", id: "box", x: 0, y: 0, width: 300, height: 80, label: { text: "project buf", fontSize: 26 } },
+    { type: "text", id: "ft", x: 0, y: 200, text: "short", fontSize: 26 },
+  ] });
+  assert.equal(r.code, 0, r.stdout);
+  let els = await all();
+  const lid = els.find((e) => e.containerId === "box").id;
+  const before = { label: els.find((e) => e.id === lid).width, ft: els.find((e) => e.id === "ft").width };
+  r = await patch({ elements: [{ id: lid, text: "project buffer" }, { id: "ft", text: "a good deal longer than short" }] });
+  assert.equal(r.code, 0, r.stdout);
+  els = await all();
+  const label = els.find((e) => e.id === lid), ft = els.find((e) => e.id === "ft");
+  assert.deepEqual([label.text, label.originalText ?? label.text], ["project buffer", "project buffer"], "get leaves originalText out when it equals text");
+  assert.ok(label.width > before.label, `the label grew: ${before.label} → ${label.width}`);
+  assert.deepEqual([ft.text, ft.originalText ?? ft.text], ["a good deal longer than short", "a good deal longer than short"]);
+  assert.ok(ft.width > before.ft * 3, `the free text grew: ${before.ft} → ${ft.width}`);
+  await A.close();
+});
+
 test("frames by position: a new element inside a frame joins it, an edit moves it in or out; a patch that says where wins", { skip }, async () => {
   const opened = await cli(["open", "framepos", "--no-open"]);
   const u = new URL(opened.json.error?.url ?? opened.json.result.url);
@@ -1553,6 +1655,58 @@ test("an empty frame keeps the box it was given; defaults give new elements the 
   // Bad defaults are refused before anything changes.
   r = await patch({ defaults: { rectangle: "solid" }, skeleton: [] });
   assert.equal(r.json.error.code, "invalid_patch");
+  await A.close();
+});
+
+test("fonts: obeya's fonts in the font menu, by name in patches, measured in their own face, embedded in SVG exports", { skip }, async () => {
+  const opened = await cli(["open", "fonts", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "fonts");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const names = ["Inter", "Inter Bold", "Source Serif", "Barlow Condensed", "Caveat", "Helvetica"];
+  const r = await cli(["patch", "fonts", "--file", "-"], { stdin: JSON.stringify({
+    defaults: { text: { fontSize: 28 } },
+    skeleton: [
+      ...names.map((n, i) => ({ type: "text", id: `t${i}`, x: 0, y: i * 60, text: `${n}: Ship v0.3 · 1,284 runs → 93% ok`, fontFamily: n })),
+      { type: "rectangle", id: "box", x: 900, y: 0, width: 200, height: 120, label: { text: "A label in Barlow Condensed", fontFamily: "barlow condensed" } },
+    ],
+  }) });
+  assert.equal(r.code, 0, r.stdout);
+  const els = (await cli(["get", "fonts", "--full"])).json.result.elements;
+  assert.deepEqual(names.map((_, i) => els.find((e) => e.id === `t${i}`).fontFamily), [200, 201, 202, 203, 204, 2]);
+  assert.equal(els.find((e) => e.containerId === "box").fontFamily, 203);
+  // Measured in the font itself, not a fallback: the width matches the browser's own measure.
+  const widths = await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.type === "text" && !e.containerId).map((e) => {
+    const c = document.createElement("canvas").getContext("2d");
+    const name = { 200: "Inter", 201: "Inter Bold", 202: "Source Serif", 203: "Barlow Condensed", 204: "Caveat", 2: "Helvetica" }[e.fontFamily];
+    c.font = `${e.fontSize}px ${name}`;
+    return [e.id, Math.round(e.width), Math.round(c.measureText(e.text).width), document.fonts.check(c.font)];
+  }));
+  for (const [id, w, measured, loaded] of widths) {
+    assert.ok(loaded, `${id}: its font is loaded`);
+    assert.ok(Math.abs(w - measured) <= 2, `${id}: width ${w}, measured ${measured}`);
+  }
+  // The font menu lists them, and Helvetica and Cascadia without the "old" badge.
+  const t0 = await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "t0"));
+  const at = await A.evaluate(([x, y]) => window.obeyaTest.toClient(x, y), [t0.x + 10, t0.y + t0.height / 2]);
+  await A.mouse.click(at.x, at.y);
+  await A.locator('[data-testid="font-family-show-fonts"]').click();
+  const menu = A.locator(".dropdown-menu.fonts"); // a popover, outside the picker
+  await until(async () => (await menu.innerText()).includes("Caveat"), { what: "the font menu" });
+  const text = await menu.innerText();
+  for (const n of [...names, "Cascadia", "Excalifont"]) assert.ok(text.includes(n), `${n} in the font menu`);
+  assert.doesNotMatch(text, /\bold\b/i, "no \"old\" badge");
+  await A.keyboard.press("Escape");
+  // SVG exports carry the fonts with them.
+  const out = path.join(S.tmp, "fonts.svg");
+  const svg = await cli(["export", "fonts", "--format", "svg", "--out", out]);
+  assert.equal(svg.code, 0, svg.stdout);
+  const file = fs.readFileSync(out, "utf8");
+  for (const n of ["Inter", "Caveat", "Barlow Condensed"]) assert.match(file, new RegExp(`@font-face\\s*{\\s*font-family:\\s*"?${n}"?`), `${n} embedded`);
   await A.close();
 });
 
@@ -1649,5 +1803,532 @@ test("mermaid: a flowchart as editable elements with stable ids; re-running repl
   r = await cli(["mermaid", "mm", "--file", "-", "--id", "bad"], { stdin: "flowchart TD\n A[x] -->> B(\n" });
   assert.equal(r.json.error.code, "invalid_mermaid", r.stdout);
   assert.ok(!(await cli(["get", "mm"])).json.result.elements.some((e) => e.id.startsWith("bad-")));
+  await A.close();
+});
+
+test("v0.3 patches: a redraw stacks re-created ids in the patch's order; pins; a look's medium; a full-frame background is locked; an id twice is refused", { skip }, async () => {
+  const opened = await cli(["open", "v03", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1600, height: 1000 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  const patch = (p, ...flags) => cli(["patch", "v03", "--file", "-", ...flags], { stdin: JSON.stringify(p) });
+  const order = async () => (await A.evaluate(() => window.obeyaTest.elements().map((e) => e.id)));
+  // A text drawn under a dark panel, then the frame redrawn the right way round.
+  let r = await patch({ skeleton: [{ type: "text", id: "T", x: 20, y: 20, text: "hello" }, { type: "rectangle", id: "R", x: 0, y: 0, width: 300, height: 200, backgroundColor: "#0f2a3a", fillStyle: "solid" }] });
+  assert.equal(r.code, 0, r.stdout);
+  r = await patch({ delete: ["T", "R"] });
+  r = await patch({ skeleton: [{ type: "rectangle", id: "R", x: 0, y: 0, width: 300, height: 200, backgroundColor: "#0f2a3a", fillStyle: "solid" }, { type: "text", id: "T", x: 20, y: 20, text: "hello", strokeColor: "#ffffff" }] });
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => { const o = await order(); return o.indexOf("R") < o.indexOf("T"); }, { what: "the redrawn text above its panel" });
+  // A look's medium, a locked background, and pins.
+  r = await patch({ skeleton: [
+    { type: "frame", id: "fr", x: 1000, y: 0, width: 800, height: 500, name: "fr" },
+    { type: "rectangle", id: "fr-bg", x: 1000, y: 0, width: 800, height: 500, frameId: "fr", backgroundColor: "#f6f7f9", fillStyle: "solid" },
+    { type: "rectangle", id: "card", x: 1100, y: 100, width: 200, height: 100, frameId: "fr", label: { text: "card" } },
+  ], pins: { id: "rv", items: [{ on: "card", note: "Too small" }] } }, "--style", "sketch");
+  assert.equal(r.code, 0, r.stdout);
+  const els = await A.evaluate(() => window.obeyaTest.elements());
+  const by = (id) => els.find((e) => e.id === id);
+  assert.equal(by("fr-bg").locked, true, "a shape that fills its frame is locked");
+  assert.equal(by("card").roughness, 1, "the sketch medium");
+  assert.equal(els.find((e) => e.containerId === "card").fontFamily, 5, "Excalifont for labels");
+  assert.equal(by("rv-1").type, "ellipse");
+  assert.deepEqual(by("rv-1").customData, { pins: "rv", pin: 1, on: "card" });
+  assert.ok(by("rv-1-t").x > by("card").x + by("card").width, "the note beside the card");
+  r = await patch({ pins: { id: "rv", items: [{ on: "card", note: "Still small" }, { on: "fr-bg", note: "Nice" }] } });
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => (await A.evaluate(() => window.obeyaTest.elements().filter((e) => e.customData?.pins === "rv" && e.customData.pin).length)) === 2, { what: "two pins" });
+  // Pins go where the same patch's layout and edits leave their elements, and can
+  // be on a new element that only layout places.
+  r = await patch({ skeleton: [{ type: "rectangle", id: "mv", x: 0, y: 600, width: 160, height: 80 }, { type: "rectangle", id: "ed", x: 300, y: 600, width: 160, height: 80 }] });
+  assert.equal(r.code, 0, r.stdout);
+  r = await patch({
+    skeleton: [{ type: "rectangle", id: "nw", width: 160, height: 80 }],
+    elements: [{ id: "ed", x: 600, y: 900 }],
+    layout: [{ grid: ["mv"], columns: 1, at: [0, 900] }, { grid: ["nw"], columns: 1, at: [300, 1100] }],
+    pins: { id: "mp", items: [{ on: "mv", note: "moved by layout" }, { on: "ed", note: "moved by an edit" }, { on: "nw", note: "placed by layout" }] },
+  });
+  assert.equal(r.code, 0, r.stdout);
+  const after = await A.evaluate(() => window.obeyaTest.elements());
+  for (const [n, on] of [[1, "mv"], [2, "ed"], [3, "nw"]]) {
+    const pin = after.find((e) => e.id === `mp-${n}`), el = after.find((e) => e.id === on);
+    const off = Math.hypot(pin.x + pin.width / 2 - (el.x + el.width), pin.y + pin.height / 2 - el.y);
+    assert.ok(off < 8, `pin ${n} on ${on}'s top-right corner (off by ${off})`);
+  }
+  // Re-applying a free text's skeleton keeps its font, with or without a look.
+  r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title", fontFamily: "Nunito", fontSize: 40 }] }, "--style", "clean");
+  const font = (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily));
+  r = await patch({ skeleton: [{ type: "text", id: "tt", x: 0, y: 400, text: "Title, again" }] }, "--style", "clean");
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => (await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").text)) === "Title, again", { what: "reworded" });
+  assert.equal(await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontFamily), font, "the font is kept");
+  assert.equal(await A.evaluate(() => window.obeyaTest.elements().find((e) => e.id === "tt").fontSize), 40);
+  r = await patch({ skeleton: [{ type: "rectangle", id: "d", x: 0, y: 0 }, { type: "rectangle", id: "d", x: 9, y: 9 }] });
+  assert.equal(r.json.error.code, "invalid_patch");
+  await A.close();
+});
+
+test("docs: a .md opens read-only in the tab at a heading; links go both ways; raw HTML is text; it reloads when the file changes; swiping never goes Back", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const md = (extra = "") => `# Spec\n\nIntro <script>window.pwned = 1</script> <b>bold</b>.\n\n[the board](?page=docboard&element=f1) · [bad](javascript:alert(1)) · [next](#3-requirements)\n\n${"Filler line.\n\n".repeat(80)}## 3 Requirements\n\nThe list.${extra}\n\n${"More.\n\n".repeat(80)}`;
+  fs.writeFileSync(path.join(dir, "notes", "spec.md"), md());
+  let r = await cli(["patch", "docboard", "--file", "-", "--no-open"], { stdin: JSON.stringify({ skeleton: [{ type: "frame", id: "f1", x: 0, y: 0, width: 600, height: 400, name: "f1" }, { type: "rectangle", id: "go", x: 50, y: 50, width: 200, height: 80, frameId: "f1", link: "?page=notes%2Fspec.md#3-requirements" }] }) });
+  const opened = await cli(["open", "docboard", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/spec.md");
+  u.hash = "3-requirements";
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc shown", timeout: 60000 });
+  assert.equal(await A.evaluate(() => getComputedStyle(document.body).overscrollBehaviorX), "none");
+  await until(() => A.evaluate(() => { const h = document.getElementById("3-requirements"); return h && h.getBoundingClientRect().top < 200; }), { what: "scrolled to the heading" });
+  assert.equal(await A.evaluate(() => window.pwned), undefined, "a doc never runs its HTML");
+  assert.match(await A.evaluate(() => document.querySelector("#doc .doc-body").textContent), /<b>bold<\/b>/);
+  assert.equal(await A.evaluate(() => [...document.querySelectorAll("#doc a")].find((a) => a.textContent === "bad").hasAttribute("href")), false);
+  // The doc → the drawing's frame; Back → the doc again.
+  await A.click("#doc a:text('the board')");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-open") && window.obeyaTest.page() === "docboard"), { what: "the drawing" });
+  await A.goBack();
+  await until(() => A.evaluate(() => document.body.classList.contains("doc-open")), { what: "the doc after Back" });
+  // The file changes: the tab shows the new text.
+  fs.writeFileSync(path.join(dir, "notes", "spec.md"), md(" Updated on disk."));
+  await until(() => A.evaluate(() => document.querySelector("#doc .doc-body").textContent.includes("Updated on disk.")), { what: "the doc reloaded" });
+  // The picker lists it.
+  const listed = await A.evaluate(() => fetch("/api/pages").then((r) => r.json()).then((j) => j.docs));
+  assert.ok(listed.some((d) => d.name === "notes/spec.md" && d.words > 100), "listed, with a word count");
+  // The picker marks each row's kind, and a doc's grey line counts its words.
+  await A.click("[data-testid=page-pill]");
+  await until(() => A.evaluate(() => document.querySelector('[data-testid=picker-row][data-name="notes/spec.md"]')), { what: "the picker, with the doc" });
+  const kinds = await A.evaluate(() => [...document.querySelectorAll("[data-testid=picker-row]")].map((r) => [r.dataset.name, r.querySelector("svg.xl-kind")?.getAttribute("aria-label"), r.querySelector(".meta")?.textContent]));
+  const doc = kinds.find(([n]) => n === "notes/spec.md"), drawing = kinds.find(([n]) => !n.endsWith(".md"));
+  assert.ok(doc, JSON.stringify(kinds));
+  assert.equal(doc[1], "doc");
+  assert.match(doc[2], /\d words/);
+  assert.ok(drawing, JSON.stringify(kinds));
+  assert.equal(drawing[1], "drawing");
+  await A.keyboard.press("Escape");
+  // The menu on a doc is the doc's: new, open, rename, the theme, about; nothing from the canvas.
+  await A.click(".main-menu-trigger");
+  const items = await A.$$eval(".dropdown-menu-item", (els) => els.map((e) => e.textContent.trim()));
+  assert.deepEqual(items.map((t) => t.replace(/\s*(Cmd|Ctrl|Shift)\+.*$/, "")), ["New page…", "Open page…", "Rename or move this doc…", "Dark mode", "About obeya"]);
+  // Rename it from the menu: the file moves, the tab follows, .md stays.
+  await A.click("[data-testid=menu-rename]");
+  await A.fill("[data-testid=rename-name]", "renamed");
+  await A.click("[data-testid=rename-submit]");
+  await until(() => fs.existsSync(path.join(dir, "notes", "renamed.md")), { what: "the doc renamed on disk" });
+  await until(() => A.evaluate(() => new URLSearchParams(location.search).get("page") === "notes/renamed.md" && document.body.classList.contains("doc-open")), { what: "the tab following the rename" });
+  assert.equal(await A.evaluate(() => document.querySelector("[data-testid=pill-name]").textContent), "renamed.md");
+  // The theme item in the doc's menu turns the doc dark, and back.
+  const docBg = () => A.evaluate(() => getComputedStyle(document.getElementById("doc")).backgroundColor);
+  await A.click(".main-menu-trigger");
+  await A.getByText("Dark mode").click();
+  await until(async () => (await docBg()) === "rgb(18, 18, 18)", { what: "the doc turns dark" });
+  if (!(await A.getByText("Light mode").isVisible())) await A.click(".main-menu-trigger");
+  await A.getByText("Light mode").click();
+  await until(async () => (await docBg()) !== "rgb(18, 18, 18)", { what: "the doc turns light again" });
+  await A.close();
+});
+
+test("a server killed before it saves: an open tab sends back what it had newer, so deleted elements stay deleted", { skip }, async () => {
+  const opened = await cli(["open", "crash", "--no-open"]);
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "crash");
+  const A = await S.context.newPage();
+  const patch = (p) => cli(["patch", "crash", "--file", "-"], { stdin: JSON.stringify(p) });
+  const ids = Array.from({ length: 12 }, (_, k) => `c${k}`);
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready()), { what: "tab ready", timeout: 60000 });
+  let r = await patch({ skeleton: ids.map((id, k) => ({ type: "rectangle", id, x: k * 60, y: 0, width: 50, height: 50 })) });
+  assert.equal(r.code, 0, r.stdout);
+  await sleep(1500); // saved
+  r = await patch({ delete: ids.slice(0, 6) });
+  assert.equal(r.code, 0, r.stdout);
+  const pid = execFileSync("lsof", ["-ti", `tcp:${S.port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).trim().split("\n")[0];
+  process.kill(Number(pid), "SIGKILL"); // before the save
+  await sleep(300);
+  r = await cli(["serve"]);
+  assert.equal(r.code, 0, r.stdout);
+  await until(async () => {
+    const els = (await cli(["get", "crash"])).json?.result?.elements ?? [];
+    return els.length === 6 && els.every((e) => !ids.slice(0, 6).includes(e.id));
+  }, { what: "the server caught up from the tab", timeout: 20000 });
+  await A.close();
+});
+
+test("docs: Edit with EasyMDE where you were reading; autosave; side by side; the agent's lines merge in; a clash asks; New doc", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  const file = path.join(dir, "notes", "edit.md");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const filler = (w) => Array.from({ length: 40 }, (_, i) => `${w} line ${i}.\n\n`).join("");
+  // Uneven, as real docs are: headings render taller than their source, long
+  // paragraphs wrap more in the source than in the preview, code renders
+  // shorter. A sync by proportion, or by guessed line heights, drifts on it.
+  const parts = Array.from({ length: 20 }, (_, i) => `## Part ${i}\n\n`).join("");
+  const long = Array.from({ length: 20 }, (_, i) => `Paragraph ${i}: ${"a long sentence that wraps across several lines in the source pane ".repeat(5)}\n\n`).join("");
+  const code = "```\n" + Array.from({ length: 80 }, (_, i) => `code ${i}`).join("\n") + "\n```\n\n";
+  fs.writeFileSync(file, `# Edit me\n\n${parts}${long}${filler("Top")}## Middle\n\nUnder the middle.\n\n${filler("Low")}${code}Last line.\n`);
+  const read = () => fs.readFileSync(file, "utf8");
+  const opened = await cli(["open", "editboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/editboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); // a drawing under the doc
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/edit.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc shown", timeout: 60000 });
+  assert.equal(await A.textContent("[data-testid=doc-mode]"), "Edit");
+  assert.equal(await A.evaluate(() => document.querySelector("#doc .EasyMDEContainer")), null, "no editor until Edit");
+  const cm = (fn, ...args) => A.evaluate(([f, a]) => { const c = document.querySelector("#doc .CodeMirror").CodeMirror; return new Function("cm", "a", f)(c, a); }, [fn, args]);
+  // Read with "## Middle" at the top, then Edit: the caret lands on its line.
+  await A.evaluate(() => { const h = document.getElementById("middle"); document.getElementById("doc").scrollTop += h.getBoundingClientRect().top - 90; });
+  await A.click("[data-testid=doc-mode]");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+  assert.equal(await A.textContent("[data-testid=doc-mode]"), "Read");
+  const middle = read().split("\n").indexOf("## Middle");
+  assert.equal(await cm("return cm.getCursor().line"), middle, "the caret on the line you were reading");
+  assert.equal(await cm("return cm.getMode().name"), "gfm", "EasyMDE's markdown mode, one CodeMirror");
+  // Typing saves itself after a pause.
+  await A.keyboard.press("End");
+  await A.keyboard.type(" (typed)");
+  await until(() => read().includes("## Middle (typed)\n"), { what: "autosaved to disk" });
+  await until(async () => (await A.textContent("[data-testid=doc-save]")) === "saved ✓", { what: "saved ✓" });
+  // Side by side is on from the start (a wide window): our renderer, inside the doc.
+  await until(() => A.evaluate(() => [...document.querySelectorAll("#doc [data-testid=doc-preview] h2")].some((h) => h.textContent === "Middle (typed)")), { what: "the side-by-side preview" });
+  // How the split scrolls and is laid out: the "side by side keeps both panes" test.
+  await A.click("#doc .doc-tb-side-by-side");
+  await cm("cm.focus()");
+  // Not split: the footer is pinned at the bottom of the window too, wherever the doc is scrolled.
+  for (const top of [0, 1500]) {
+    await A.evaluate((t) => { document.getElementById("doc").scrollTop = t; }, top);
+    await sleep(100);
+    const gap = await A.evaluate(() => Math.round(innerHeight - document.querySelector("#doc .editor-statusbar").getBoundingClientRect().bottom));
+    assert.ok(Math.abs(gap) <= 1, `the footer at the bottom while editing (scrolled to ${top}: gap ${gap})`);
+  }
+  await cm("cm.setCursor({ line: a[0], ch: 0 }); cm.scrollIntoView(null, 200)", middle);
+  await A.keyboard.press("End");
+  // The agent writes another line while you type: both kept, yours not lost.
+  await A.keyboard.type(" and more");
+  fs.writeFileSync(file, read().replace("Last line.\n", "Last line, by the agent.\n"));
+  await until(async () => {
+    const v = await cm("return cm.getValue()");
+    return v.includes("## Middle (typed) and more\n") && v.includes("Last line, by the agent.\n");
+  }, { what: "their line merged into the editor" });
+  assert.equal(await cm("return cm.getCursor().line"), middle, "the caret stays");
+  // The merged line is tinted, and the tint fades out rather than switching off.
+  const fade = await A.evaluate(() => { const el = document.querySelector("#doc .CodeMirror .doc-merged"); return el && getComputedStyle(el).animationName; });
+  assert.equal(fade, "doc-fade", "the merged tint fades");
+  await until(() => read().includes("## Middle (typed) and more\n") && read().includes("Last line, by the agent.\n"), { what: "the merge saved" });
+  // Both change the same line: a banner; nothing saved until you choose.
+  const clash = async (mine, theirs) => {
+    await cm("cm.focus(); cm.setCursor({ line: a[0], ch: 0 })", middle + 2);
+    await A.keyboard.press("End");
+    await A.keyboard.type(mine);
+    fs.writeFileSync(file, read().replace("Under the middle.", `Under the middle.${theirs}`));
+    await until(() => A.evaluate(() => document.querySelector("[data-testid=doc-clash]")), { what: "the clash banner" });
+    assert.match(await A.textContent("[data-testid=doc-save]"), /not saved/);
+    assert.ok(read().includes(theirs) && !read().includes(mine), "theirs on disk until you choose");
+    assert.equal(await A.evaluate(() => { const e = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; }), true, "closing the tab asks");
+  };
+  await clash(" Mine.", " Theirs.");
+  await A.click("[data-testid=doc-mine]");
+  await until(() => read().includes("Under the middle. Mine.\n"), { what: "Keep mine saved mine" });
+  assert.equal(await A.evaluate(() => document.querySelector("[data-testid=doc-clash]")), null);
+  await clash(" Again mine.", " Again theirs.");
+  await A.click("[data-testid=doc-theirs]");
+  await until(async () => (await cm("return cm.getValue()")).includes("Under the middle. Again theirs. Mine.\n"), { what: "Load theirs put theirs in" });
+  await until(() => !read().includes("Again mine"), { what: "theirs kept on disk" });
+  // The bulleted-list button writes "- ", as the docs are written.
+  const low = read().split("\n").indexOf("Low line 3.");
+  await cm("cm.focus(); cm.setCursor({ line: a[0], ch: 0 })", low);
+  await A.click("#doc .doc-tb-unordered-list");
+  assert.equal(await cm("return cm.getLine(a[0])", low), "- Low line 3.");
+  await cm("cm.undo()");
+  // Read (Cmd/Ctrl+E): the rendered doc, with the edits.
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing") && document.querySelector("#doc .doc-body").textContent.includes("Middle (typed) and more")), { what: "Read again" });
+  // A narrow window: Edit opens plain, one pane.
+  await A.setViewportSize({ width: 850, height: 800 });
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "Edit, narrow" });
+  await sleep(300);
+  assert.equal(await A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview]")), null, "narrow: no side by side");
+  await A.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing")), { what: "Read again" });
+  await A.setViewportSize({ width: 1200, height: 800 });
+  // New doc: the New page dialog's Kind, then the picker's "+ New doc".
+  await A.click("[data-testid=page-pill]");
+  await A.click("[data-testid=picker-new]");
+  await A.click("[data-testid=new-page-kind-doc]");
+  await A.fill("[data-testid=new-page-name]", "fresh");
+  await A.click("[data-testid=new-page-create]");
+  await until(() => fs.existsSync(path.join(dir, "notes", "fresh.md")), { what: "the new doc on disk" });
+  assert.equal(fs.readFileSync(path.join(dir, "notes", "fresh.md"), "utf8"), "# fresh\n\n");
+  await until(() => A.evaluate(() => new URLSearchParams(location.search).get("page") === "notes/fresh.md" && document.body.classList.contains("doc-editing")), { what: "the new doc open in Edit", timeout: 30000 });
+  await A.click("[data-testid=page-pill]");
+  await A.fill("[data-testid=picker-search]", "quick.md");
+  await until(() => A.evaluate(() => document.querySelector("[data-testid=picker-create]")?.textContent.startsWith("+ New doc")), { what: "+ New doc in the picker" });
+  await A.keyboard.press("Enter");
+  await until(() => fs.existsSync(path.join(dir, "notes", "quick.md")), { what: "the picker's new doc on disk" });
+  await A.close();
+});
+
+// A doc shaped like a real spec: a wide table, lists, long paragraphs, code.
+function splitDoc() {
+  const long = (s) => `${s} ${"Every requirement says what it gives the person and how we know it's done, in words a reader can check. ".repeat(3)}`;
+  // Table rows and bullets as long as a real spec's: one source line wraps
+  // to several in the editor, so its line heights can't be guessed.
+  const rows = Array.from({ length: 14 }, (_, i) => `| ${String(i + 1).padStart(2, "0")} | Decision ${i + 1} about the editor | ${i % 3 ? "A short answer" : "A longer answer that wraps onto a second line in the rendered table, as real answers do; " + "with its reasons spelled out at length, as they are in a spec someone will build from. ".repeat(3)} |`).join("\n");
+  const sections = Array.from({ length: 8 }, (_, i) => [
+    `### R${i + 1} Requirement number ${i + 1}`, "",
+    long(`Gives: requirement ${i + 1}.`), "",
+    ...(i % 2 ? ["- " + long("A long bullet.") + long(""), "- A short bullet.", "- " + long("Another long one.") + long(""), "- " + long("One more.")] : ["```", ...Array.from({ length: 12 }, (_, k) => `code line ${k} of section ${i + 1}`), "```"]), "",
+  ].join("\n")).join("\n");
+  return `# Sync check\n\n${long("Intro.")}\n\n## Decisions\n\n| # | Decision | Answer |\n|---|---|---|\n${rows}\n\n## Requirements\n\n${sections}\n## Notes\n\n${Array.from({ length: 12 }, (_, i) => long(`Note ${i}.`)).join("\n\n")}\n`;
+}
+
+test("docs: side by side keeps both panes on the same line, whichever you scroll, at any window size, after a reload", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes", "split.md"), splitDoc());
+  const opened = await cli(["open", "splitboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/splitboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/split.md");
+  // Where each pane's top is, as a fractional source line, measured here (not
+  // by the code under test): the editor from CodeMirror's line geometry, the
+  // preview from its blocks' data-line, interpolated by line.
+  const MEASURE = `(() => {
+    const cm = document.querySelector("#doc .CodeMirror").CodeMirror;
+    const pv = document.querySelector("#doc [data-testid=doc-preview]");
+    const info = cm.getScrollInfo();
+    const l = cm.lineAtHeight(info.top, "local"), y0 = cm.heightAtLine(l, "local"), y1 = l + 1 < cm.lineCount() ? cm.heightAtLine(l + 1, "local") : info.height;
+    const editorLine = l + (y1 > y0 ? Math.min(1, Math.max(0, (info.top - y0) / (y1 - y0))) : 0);
+    const pt = pv.getBoundingClientRect().top - pv.scrollTop;
+    const bs = [...pv.querySelectorAll(":scope > [data-line]")].map((b) => ({ line: +b.dataset.line, y: b.getBoundingClientRect().top - pt }));
+    bs.push({ line: cm.lineCount(), y: pv.scrollHeight });
+    let i = 0;
+    while (i < bs.length - 2 && bs[i + 1].y <= pv.scrollTop) i++;
+    const a = bs[i], b = bs[i + 1];
+    const previewLine = a.line + (b.y > a.y ? Math.min(1, Math.max(0, (pv.scrollTop - a.y) / (b.y - a.y))) : 0) * (b.line - a.line);
+    return { editorLine, previewLine, editorEnd: info.top + info.clientHeight >= info.height - 2, previewEnd: pv.scrollTop + pv.clientHeight >= pv.scrollHeight - 2, editorTop: info.top, previewTop: pv.scrollTop };
+  })()`;
+  for (const [w, h] of [[1000, 576], [1400, 850]]) {
+    const A = await S.context.newPage();
+    await A.setViewportSize({ width: w, height: h });
+    await A.goto(u.href);
+    await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+    await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h2")), { what: "the preview, on from the start" });
+    await sleep(300);
+    const at = `${w}×${h}`;
+    // The layout: two panes the height of the window, the footer flush at the
+    // bottom, the page itself not scrolling, nothing over Read.
+    const layout = await A.evaluate(() => {
+      const pv = document.querySelector("#doc [data-testid=doc-preview]").getBoundingClientRect();
+      const ed = document.querySelector("#doc .CodeMirror").getBoundingClientRect();
+      const bar = document.querySelector("#doc .editor-statusbar").getBoundingClientRect();
+      const btn = document.querySelector("[data-testid=doc-mode]").getBoundingClientRect();
+      const doc = document.getElementById("doc");
+      return { pvTop: pv.top, edTop: ed.top, pvBottom: pv.bottom, edBottom: ed.bottom, pvLeft: pv.left, edRight: ed.right, barGap: innerHeight - bar.bottom, barHeight: bar.height,
+        pageScrolls: doc.scrollHeight > doc.clientHeight + 1, readOnTop: document.elementFromPoint(btn.x + btn.width / 2, btn.y + btn.height / 2)?.dataset.testid === "doc-mode" };
+    });
+    assert.ok(Math.abs(layout.pvTop - layout.edTop) <= 2 && Math.abs(layout.pvBottom - layout.edBottom) <= 2, `${at}: the panes side by side, same top and bottom ${JSON.stringify(layout)}`);
+    assert.ok(layout.edRight <= layout.pvLeft + 2, `${at}: the editor left of the preview`);
+    assert.ok(Math.abs(layout.barGap) <= 1 && layout.barHeight < 40, `${at}: the footer one line, flush at the bottom ${JSON.stringify(layout)}`);
+    assert.ok(!layout.pageScrolls, `${at}: the page under the split doesn't scroll`);
+    assert.ok(layout.readOnTop, `${at}: nothing covers Read`);
+    // Each heading put at the top of one pane is at the top of the other.
+    const heads = await A.evaluate(() => {
+      const pv = document.querySelector("#doc [data-testid=doc-preview]");
+      const pt = pv.getBoundingClientRect().top - pv.scrollTop;
+      return [...pv.querySelectorAll(":scope > h2[data-line], :scope > h3[data-line]")]
+        .map((x) => ({ line: +x.dataset.line, text: x.textContent, y: x.getBoundingClientRect().top - pt }))
+        .filter((x) => x.y <= pv.scrollHeight - pv.clientHeight - 4);
+    });
+    assert.ok(heads.length >= 6, `${at}: headings to check: ${heads.length}`);
+    for (const hd of heads) {
+      await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.scrollTo(null, cm.heightAtLine(l, "local")); }, hd.line);
+      await sleep(250);
+      const off = await A.evaluate((l) => {
+        const pv = document.querySelector("#doc [data-testid=doc-preview]");
+        return pv.querySelector(`:scope > [data-line="${l}"]`).getBoundingClientRect().top - pv.getBoundingClientRect().top;
+      }, hd.line);
+      assert.ok(Math.abs(off) <= 16, `${at}: "${hd.text}" at the editor's top is ${Math.round(off)} px from the preview's top`);
+    }
+    for (const hd of heads) {
+      await A.evaluate((y) => { document.querySelector("#doc [data-testid=doc-preview]").scrollTop = y; }, hd.y);
+      await sleep(250);
+      const off = await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; return cm.heightAtLine(l, "local") - cm.getScrollInfo().top; }, hd.line);
+      assert.ok(Math.abs(off) <= 16, `${at}: "${hd.text}" at the preview's top is ${Math.round(off)} px from the editor's top`);
+    }
+    // Real wheel scrolling, trackpad-like, in either pane: the tops stay within a line.
+    const pane = async (sel) => { const r = await A.locator(sel).first().boundingBox(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+    await A.evaluate(() => document.querySelector("#doc .CodeMirror").CodeMirror.scrollTo(null, 0));
+    await sleep(250);
+    for (const [sel, dy, steps] of [["#doc .CodeMirror", 20, 30], ["#doc .CodeMirror", 60, 20], ["#doc [data-testid=doc-preview]", 20, 30], ["#doc [data-testid=doc-preview]", -50, 15], ["#doc .CodeMirror", -30, 10], ["#doc [data-testid=doc-preview]", 80, 15]]) {
+      const before = await A.evaluate(MEASURE);
+      await A.mouse.move(...(await pane(sel)));
+      for (let k = 0; k < steps; k++) { await A.mouse.wheel(0, dy); await sleep(16); }
+      await sleep(400);
+      const m = await A.evaluate(MEASURE);
+      const what = `${at}: wheel ${dy > 0 ? "down" : "up"} in the ${sel.includes("CodeMirror") ? "editor" : "preview"}`;
+      assert.ok(Math.abs(m.editorTop - before.editorTop) > 50 || Math.abs(m.previewTop - before.previewTop) > 50, `${what}: something scrolled ${JSON.stringify(m)}`);
+      if (!m.editorEnd && !m.previewEnd) assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${what}: the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    }
+    // Momentum: a pane scrolled smoothly, frame by frame, is never pushed back
+    // by the pane following it (the follower's own scroll isn't taken for yours).
+    for (const who of ["editor", "preview"]) {
+      const r = await A.evaluate((w) => new Promise((done) => {
+        const cm = document.querySelector("#doc .CodeMirror").CodeMirror, pv = document.querySelector("#doc [data-testid=doc-preview]");
+        const get = () => (w === "editor" ? cm.getScrollInfo().top : pv.scrollTop);
+        const set = (y) => (w === "editor" ? cm.scrollTo(null, y) : (pv.scrollTop = y));
+        set(0);
+        let k = 0, last = null, pushed = [];
+        const step = () => {
+          const now = get();
+          if (last !== null && Math.abs(now - last) > 1) pushed.push([k, Math.round(last), Math.round(now)]);
+          if (k++ >= 90) return done({ pushed, top: now });
+          set(now + 14);
+          last = get();
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(step));
+      }), who);
+      assert.deepEqual(r.pushed, [], `${at}: scrolling the ${who} smoothly, the other pane pushed it back (frame, set, found): ${JSON.stringify(r.pushed.slice(0, 5))}`);
+      assert.ok(r.top > 900, `${at}: the ${who} scrolled (${r.top})`);
+      await sleep(300);
+      const m = await A.evaluate(MEASURE);
+      if (!m.editorEnd && !m.previewEnd) assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${at}: after smooth scrolling the ${who}, the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    }
+    // Typing in the split keeps them together.
+    const first = heads[2];
+    await A.evaluate((l) => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setCursor({ line: l + 2, ch: 0 }); cm.scrollTo(null, cm.heightAtLine(l, "local")); }, first.line);
+    await A.keyboard.type("Typed while split. ");
+    await sleep(800);
+    const m = await A.evaluate(MEASURE);
+    assert.ok(Math.abs(m.editorLine - m.previewLine) <= 1, `${at}: after typing, the editor's top is line ${m.editorLine.toFixed(1)}, the preview's ${m.previewLine.toFixed(1)}`);
+    // Lines arriving above what you're looking at (the agent's, merged in): the preview follows.
+    await A.evaluate((l) => {
+      const cm = document.querySelector("#doc .CodeMirror").CodeMirror;
+      cm.scrollTo(null, cm.heightAtLine(l, "local"));
+      cm.replaceRange(Array.from({ length: 12 }, (_, i) => `Merged paragraph ${i} from the agent, long enough to take a line or two in either pane.\n\n`).join(""), { line: 2, ch: 0 });
+    }, heads[4].line);
+    await sleep(800);
+    const n = await A.evaluate(MEASURE);
+    assert.ok(Math.abs(n.editorLine - n.previewLine) <= 1, `${at}: after lines arrive above, the editor's top is line ${n.editorLine.toFixed(1)}, the preview's ${n.previewLine.toFixed(1)}`);
+    await A.close();
+  }
+});
+
+test("docs: Edit is readable in both themes: selected text, the landing tint, inline code, the active toolbar button (contrast at least 3:1), hairline separators", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR;
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes", "dark.md"), "# Dark\n\nGives: a doc opens exactly as today, plus `one` Edit button.\n\n- A **bold** bullet.\n");
+  const opened = await cli(["open", "darkboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/darkboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/dark.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1200, height: 800 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+  const contrastOf = (sel, bgSel) => A.evaluate(([s, b]) => {
+    const rgb = (c) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    const lum = ([r, g, bl]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bl); };
+    // The background behind an element: its own, else the nearest painted one under it.
+    const paint = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; const v = rgb(c); if (v.length >= 3 && (v[3] ?? 1) > 0.5) return v; } return [255, 255, 255]; };
+    const fg = rgb(getComputedStyle(document.querySelector(s)).color);
+    const bg = b ? (() => { const el = document.querySelector(b); const v = rgb(getComputedStyle(el).backgroundColor); return (v[3] ?? 1) > 0.5 ? v : paint(el.parentElement); })() : paint(document.querySelector(s));
+    const [x, y] = [lum(fg), lum(bg)].sort((m, n) => n - m);
+    return { ratio: (x + 0.05) / (y + 0.05), fg, bg };
+  }, [sel, bgSel]);
+  for (const theme of ["light", "dark"]) {
+    if (theme === "dark") {
+      await A.click(".main-menu-trigger");
+      await A.getByText("Dark mode").click();
+      await until(() => A.evaluate(() => getComputedStyle(document.getElementById("doc")).backgroundColor === "rgb(18, 18, 18)"), { what: "dark" });
+    }
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+    // The line Edit landed on is tinted for a moment: still readable.
+    let c = await contrastOf("#doc .CodeMirror-line .cm-header:not(.cm-formatting)", "#doc .CodeMirror .doc-landed");
+    assert.ok(c.ratio >= 3, `${theme}: the landing tint, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    await sleep(1500);
+    // Inline code.
+    c = await contrastOf("#doc .CodeMirror .cm-comment");
+    assert.ok(c.ratio >= 3, `${theme}: inline code, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    // Selected text, focused.
+    await A.evaluate(() => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setSelection({ line: 2, ch: 10 }, { line: 2, ch: 40 }); });
+    await sleep(100);
+    c = await contrastOf("#doc .CodeMirror-line span", "#doc .CodeMirror-selected");
+    assert.ok(c.ratio >= 3, `${theme}: selected text, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    // The toolbar: the active button (side by side, on from the start) readable; separators hairlines, not bars.
+    await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h1")), { what: "split" });
+    await A.mouse.move(5, 400); // no hover
+    c = await contrastOf("#doc .doc-tb-side-by-side.active", "#doc .doc-tb-side-by-side.active");
+    assert.ok(c.ratio >= 3, `${theme}: the active toolbar button, contrast ${c.ratio.toFixed(2)} ${JSON.stringify(c)}`);
+    const seps = await A.evaluate(() => {
+      const rgb = (s) => (s.match(/[\d.]+/g) ?? []).map(Number);
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+      const bar = rgb(getComputedStyle(document.querySelector("#doc .editor-toolbar")).backgroundColor);
+      const s = getComputedStyle(document.querySelector("#doc .editor-toolbar i.separator"));
+      return [s.borderLeftColor, s.borderRightColor].map((c) => { const v = rgb(c); return (v[3] ?? 1) < 0.1 || s.borderRightWidth === "0px" && c === s.borderRightColor ? 1 : ratio(v, bar); });
+    });
+    assert.ok(seps.every((r) => r <= 3), `${theme}: toolbar separators are hairlines (contrast ${seps.map((r) => r.toFixed(2))})`);
+    await A.click("#doc .doc-tb-side-by-side");
+    await A.click("[data-testid=doc-mode]");
+    await until(() => A.evaluate(() => !document.body.classList.contains("doc-editing")), { what: "Read" });
+  }
+  await A.click(".main-menu-trigger");
+  await A.getByText("Light mode").click();
+  await A.close();
+});
+
+test("docs: what changed on disk is tinted and fades, in Read and in the side-by-side preview: the paragraph, the one bullet, the one table row", { skip }, async () => {
+  const dir = S.env.OBEYA_DIR, file = path.join(dir, "notes", "tint.md");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const doc = (p = "First paragraph.", b = "Bullet two", r = "| 2 | two |") => `# Tint\n\n${p}\n\n- Bullet one\n- ${b}\n- Bullet three\n\n| # | Name |\n|---|---|\n| 1 | one |\n${r}\n| 3 | three |\n\nLast paragraph.\n`;
+  fs.writeFileSync(file, doc());
+  const opened = await cli(["open", "tintboard", "--no-open"]);
+  await fetch(`http://127.0.0.1:${S.port}/api/pages/tintboard`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const u = new URL(opened.json.error?.url ?? opened.json.result.url);
+  u.searchParams.set("test", "1");
+  u.searchParams.set("page", "notes/tint.md");
+  const A = await S.context.newPage();
+  await A.setViewportSize({ width: 1400, height: 900 });
+  await A.goto(u.href);
+  await until(() => A.evaluate(() => window.obeyaTest?.ready() && document.body.classList.contains("doc-open")), { what: "the doc", timeout: 60000 });
+  const tinted = (root) => A.evaluate((r) => [...document.querySelectorAll(`${r} .doc-changed`)].map((e) => [e.tagName, e.textContent.trim().replace(/\s+/g, " "), getComputedStyle(e.tagName === "TR" ? e.firstElementChild : e).animationName]), root);
+  // Read: the agent changes a paragraph, one bullet and one table row.
+  fs.writeFileSync(file, doc("First paragraph, changed.", "Bullet two, changed", "| 2 | two, changed |"));
+  await until(() => A.evaluate(() => document.querySelector("#doc .doc-body").textContent.includes("two, changed")), { what: "the reload" });
+  let t = await tinted("#doc .doc-body");
+  assert.deepEqual(t.map(([tag, text]) => [tag, text]), [["P", "First paragraph, changed."], ["LI", "Bullet two, changed"], ["TR", "2 two, changed"]], JSON.stringify(t));
+  assert.ok(t.every(([, , anim]) => anim === "doc-fade-block"), `they fade: ${JSON.stringify(t)}`);
+  // Side by side: the merged lines light up in the preview too; your own typing doesn't.
+  await A.click("[data-testid=doc-mode]");
+  await until(() => A.evaluate(() => document.querySelector("#doc .CodeMirror")?.CodeMirror), { what: "EasyMDE", timeout: 60000 });
+  await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview] h1")), { what: "the preview, on from the start" });
+  await A.evaluate(() => { const cm = document.querySelector("#doc .CodeMirror").CodeMirror; cm.focus(); cm.setCursor({ line: cm.lastLine(), ch: 0 }); });
+  await A.keyboard.type("Typed by you.");
+  await sleep(1200);
+  assert.deepEqual(await tinted("#doc [data-testid=doc-preview]"), [], "your own typing isn't tinted");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("Bullet three", "Bullet three, from the agent"));
+  await until(() => A.evaluate(() => document.querySelector("#doc [data-testid=doc-preview]").textContent.includes("three, from the agent")), { what: "the merge in the preview" });
+  await sleep(300);
+  t = await tinted("#doc [data-testid=doc-preview]");
+  assert.deepEqual(t.map(([tag, text]) => [tag, text]), [["LI", "Bullet three, from the agent"]], JSON.stringify(t));
   await A.close();
 });
