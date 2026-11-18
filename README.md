@@ -74,6 +74,26 @@ Your agent starts obeya in the background and opens the canvas in your browser. 
 
 Every change goes through the live editor, so your open tab stays in step. Pages are plain `.excalidraw` files: commit them, or keep them out of git.
 
+## What you get
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="docs/readme/feature-draws.png" alt="A diagram as ASCII in a dark terminal, beside the same flow drawn as coloured boxes and arrows on the canvas"><br><b>It draws instead of describing</b><br>Diagrams, flows, wireframes and slides on a real canvas, not ASCII in a terminal.</td>
+<td width="33%" valign="top"><img src="docs/readme/feature-answer.png" alt="A red circle around a sign-in button and a pink note, beside the JSON the agent reads: what the circle points at"><br><b>You answer by drawing</b><br>Circle, arrow, sticky note, drag. It reads what you did and what each mark points at.</td>
+<td width="33%" valign="top"><img src="docs/readme/feature-checks.png" alt="Overlapping boxes, text running out of its box and faint text, each flagged in red; beside them, the same drawing fixed"><br><b>It checks its own work</b><br>It checks the page for overlaps, clipped text and hard-to-read colours, fixes them, and takes one screenshot of what it built.</td>
+</tr>
+<tr>
+<td valign="top"><img src="docs/readme/feature-look.png" alt="Six frames on a page; your view, a dashed outline on one, moved by the agent to a blue outline on Pricing"><br><b>It shows you where to look</b><br>It moves your view to the right frame while you talk.</td>
+<td valign="top"><img src="docs/readme/feature-components.png" alt="A library search for aws lambda, beside AWS icons and a form field and toggle inserted on the canvas"><br><b>Real components</b><br>Wireframe kits, cloud icons, C4 and more, from about 230 public libraries.</td>
+<td valign="top"><img src="docs/readme/feature-share.png" alt="A slide in present mode with a red laser trail circling a bar, beside the export menu: PNG, SVG, PDF, HTML slideshow"><br><b>Share the result</b><br>Present frame by frame with a laser pointer, or export PNG, SVG, PDF or a one-file slideshow.</td>
+</tr>
+<tr>
+<td valign="top"><img src="docs/readme/feature-docs.png" alt="A Markdown doc open in the tab, editor and preview side by side; two lines the agent just wrote are lit green in both"><br><b>Docs you both edit</b><br>Markdown files open in the tab beside your drawings. Edit them side by side with a preview; when your agent writes to the file, its lines merge in and light up.</td>
+<td valign="top"><img src="docs/readme/feature-looks.png" alt="The same sign-in screen three times: hand-drawn sketch, plain clean, and polished hifi with a blue button"><br><b>Rough or polished</b><br>Sketch for a working session, clean for a plan, hifi for a sign-off. Your agent picks the look for who it's for.</td>
+<td valign="top"><img src="docs/readme/feature-pins.png" alt="Three pricing cards with pink numbered pins 1, 2 and 3, and the three review notes listed beside them"><br><b>Numbered notes</b><br>Review notes pinned to what they're about and numbered, so you can answer "2: yes".</td>
+</tr>
+</table>
+
 ## Example use cases
 
 Each example was drawn by an agent through obeya (Claude Code with Claude Opus 5.5). Results depend on your agent.
@@ -97,21 +117,6 @@ Each example was drawn by an agent through obeya (Claude Code with Claude Opus 5
 </table>
 
 The prototype uses components from [ecommerce mobile ui](https://github.com/excalidraw/excalidraw-libraries/blob/main/libraries/webkul/ecommerce-mobile-ui.excalidrawlib) by Webkul Software (MIT), and the architecture uses [AWS Serverless Icons v2](https://github.com/excalidraw/excalidraw-libraries/blob/main/libraries/stojanovic/aws-serverless-icons-v2.excalidrawlib) by slobodan, both from the public Excalidraw libraries catalogue.
-
-## What you get
-
-<table>
-<tr>
-<td width="33%" valign="top"><b>It draws instead of describing</b><br>Diagrams, flows, wireframes and slides on a real canvas, not ASCII in a terminal.</td>
-<td width="33%" valign="top"><b>You answer by drawing</b><br>Circle, arrow, sticky note, drag. It reads what you did and what each mark points at.</td>
-<td width="33%" valign="top"><b>It checks its own work</b><br>It checks the page for overlaps, clipped text and hard-to-read colours, fixes them, and takes one screenshot of what it built.</td>
-</tr>
-<tr>
-<td valign="top"><b>It shows you where to look</b><br>It moves your view to the right frame while you talk.</td>
-<td valign="top"><b>Real components</b><br>Wireframe kits, cloud icons, C4 and more, from about 230 public libraries.</td>
-<td valign="top"><b>Share the result</b><br>Present frame by frame with a laser pointer, or export PNG, SVG, PDF or a one-file slideshow.</td>
-</tr>
-</table>
 
 ## The CLI
 
@@ -144,7 +149,7 @@ $ obeya wait signup-flow --frame f-signup --ask "Which sign-in should we build? 
 - 🛡️ Other websites open in your browser can't reach it (it checks `Host`, `Origin` and `Sec-Fetch-Site`).
 - ⚠️ No login or token: other programs and users on the same machine can reach it, as with most local dev servers.
 - 🚫 No telemetry. Pages, screenshots and exports never leave your machine.
-- ⬇️ Downloads only: the pinned Excalidraw editor, its Mermaid converter and fonts (from `esm.sh`), component libraries you ask for, and once a day obeya's latest version number from the npm registry (`OBEYA_NO_UPDATE_CHECK=1` turns that off). Your Mermaid text is converted in your browser.
+- ⬇️ Downloads only: the pinned Excalidraw editor, its fonts and Mermaid converter, and the Markdown renderer and editor (from `esm.sh`), component libraries you ask for, and once a day obeya's latest version number from the npm registry (`OBEYA_NO_UPDATE_CHECK=1` turns that off). Your Mermaid text is converted in your browser. The fonts obeya adds (Inter, Source Serif, Barlow Condensed, Caveat) ship with it.
 
 ## FAQ
 
