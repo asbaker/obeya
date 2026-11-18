@@ -23,6 +23,9 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "obeya": {
+    "headline": "Markdown docs you both edit, sketch/clean/hifi looks, numbered pins, new fonts, update notices"
+  },
   "engines": {
     "node": ">=22.20"
   },
