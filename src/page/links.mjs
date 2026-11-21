@@ -23,6 +23,18 @@ export function linkForSelection(id) {
   return u.toString();
 }
 
+// A canvas link as it opens in a new tab: this server's origin (the link may
+// have been made on another port), and this page named when the link only
+// gives an element.
+function newTabUrl(url) {
+  const u = new URL(location.origin + "/");
+  for (const [k, v] of url.searchParams) u.searchParams.set(k, v);
+  if (!u.searchParams.has("page") && S.currentPage) u.searchParams.set("page", S.currentPage);
+  u.hash = url.hash;
+  return u.toString();
+}
+const wantsNewTab = (ev) => !!(ev && (ev.metaKey || ev.ctrlKey));
+
 let lastLinkOpen = 0;
 export function onLinkOpen(element, event) {
   let url;
@@ -35,6 +47,11 @@ export function onLinkOpen(element, event) {
   event.preventDefault();
   // Hidden elements still receive clicks; only links inside the shown frame count.
   if (presenting() && S.focusedFrame && element.frameId !== S.focusedFrame && element.id !== S.focusedFrame) return;
+  // Cmd/Ctrl+click, as in a browser: open it in a new tab, leave this one where it is.
+  if (wantsNewTab(event.detail?.nativeEvent)) {
+    window.open(newTabUrl(url), "_blank", "noopener");
+    return;
+  }
   if (page && page.endsWith(".md")) openPage(page, null, { heading: url.hash ? decodeURIComponent(url.hash.slice(1)) : undefined });
   else if (page && page !== S.currentPage) openPage(page).then(() => goTo(target, { lock: presenting() }));
   else goTo(target, { lock: presenting() });
@@ -57,5 +74,5 @@ document.addEventListener("click", (ev) => {
   if (!presenting() || !S.api || Date.now() - lastLinkOpen < 400) return; // Excalidraw already handled it
   if (!ev.target.closest?.(".excalidraw canvas, .excalidraw__canvas")) return;
   const el = linkUnder(ev.clientX, ev.clientY);
-  if (el) onLinkOpen(el, { preventDefault() {} });
+  if (el) onLinkOpen(el, { preventDefault() {}, detail: { nativeEvent: ev } });
 }, true);

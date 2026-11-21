@@ -361,6 +361,18 @@ test("full loop: agent patch, the person's edits, changes, shot, present, stop",
   assert.ok(!hidden.has("n1") && !hidden.has("go"), "own frame shown");
   const go = await el("go");
   const gp = await client(...center(go));
+  // Cmd/Ctrl+click opens the link in a new tab, on this page, and leaves this tab on f1.
+  // (The new tab drops ?element= from its address once it has read it, so check what it asked for.)
+  const [opened, tab] = await Promise.all([
+    S.context.waitForEvent("request", { predicate: (r) => r.isNavigationRequest() && r.url().includes("element="), timeout: 5000 }),
+    S.context.waitForEvent("page", { timeout: 5000 }),
+    S.page.mouse.move(gp.x, gp.y).then(() => S.page.keyboard.down("ControlOrMeta"))
+      .then(() => S.page.mouse.click(gp.x, gp.y)).finally(() => S.page.keyboard.up("ControlOrMeta")),
+  ]);
+  assert.equal(opened.url(), `http://127.0.0.1:${S.port}/?element=f2&page=board`);
+  await tab.close();
+  await sleep(300);
+  assert.equal(await T("focusedFrame"), "f1", "a modifier click leaves this tab where it is");
   await S.page.mouse.click(gp.x, gp.y);
   await until(() => T("focusedFrame").then((f) => f === "f2"), { what: "link to f2", timeout: 5000 });
   assert.ok(new Set(await T("hidden")).has("n1"));
