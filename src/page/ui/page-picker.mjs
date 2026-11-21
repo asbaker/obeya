@@ -2,7 +2,7 @@ import { validPageName, normalizePageName, joinName, folderOf, baseName, folders
 import { React, h } from "../deps.mjs";
 import { KEY_PAGES } from "../state.mjs";
 import { getJSON } from "../server-link.mjs";
-import { createPage, openPage, recentPages } from "../pages.mjs";
+import { createPage, listedPages, openPage, recentPages } from "../pages.mjs";
 import { closeOnBackdrop, toast } from "./common.mjs";
 
 function edited(iso) {
@@ -25,14 +25,14 @@ const ICON = {
 export const kindIcon = (doc) => h("svg", { className: "xl-kind", viewBox: "0 0 20 20", "aria-label": doc ? "doc" : "drawing", "data-testid": doc ? "kind-doc" : "kind-drawing",
   dangerouslySetInnerHTML: { __html: doc ? ICON.doc : ICON.drawing } });
 
-export function PagePicker({ pages, skipped, current, waiting = new Set(), onClose, onNew }) {
+export function PagePicker({ pages, docs, skipped, current, waiting = new Set(), onClose, onNew }) {
   const [query, setQuery] = React.useState("");
   const [hl, setHl] = React.useState(0);
   const [fresh, setFresh] = React.useState(null);
   // Details (frame counts, times) when it opens, and again when the list changes.
-  React.useEffect(() => { getJSON("/api/pages").then(setFresh).catch(() => {}); }, [pages, skipped]);
+  React.useEffect(() => { getJSON("/api/pages").then(setFresh).catch(() => {}); }, [pages, docs, skipped]);
   React.useEffect(() => { document.querySelector(".xl-row.hl")?.scrollIntoView({ block: "nearest" }); });
-  const list = [...(fresh?.pages ?? pages), ...(fresh?.docs ?? []).map((d) => ({ ...d, doc: true }))], skip = fresh?.skipped ?? skipped;
+  const list = listedPages(fresh ?? { pages, docs }), skip = fresh?.skipped ?? skipped;
   const names = list.map((p) => p.name);
   const byName = new Map(list.map((p) => [p.name, p]));
   const here = folderOf(current ?? "");

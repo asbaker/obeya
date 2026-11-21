@@ -10,6 +10,10 @@ import { hideDoc, isDocName, showDoc } from "./doc.mjs";
 
 // Pages this browser opened lately, newest first (for the page picker).
 const RECENT_KEY = "obeya-recent";
+// Everything the picker lists, drawings then markdown docs, from /api/pages
+// (or its "pages" event): the one list the page button counts too.
+export const listedPages = ({ pages = [], docs = [] }) => [...pages, ...docs.map((d) => ({ ...d, doc: true }))];
+
 export const recentPages = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; } };
 export function forgetPage(name) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(recentPages().filter((n) => n !== name)));

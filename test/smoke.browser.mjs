@@ -1912,6 +1912,11 @@ test("docs: a .md opens read-only in the tab at a heading; links go both ways; r
   assert.match(doc[2], /\d words/);
   assert.ok(drawing, JSON.stringify(kinds));
   assert.equal(drawing[1], "drawing");
+  // The page button counts what the picker lists, docs included.
+  const count = (sel) => A.evaluate((s) => Number(/(\d+) pages?/.exec(document.querySelector(s).textContent)?.[1]), sel);
+  const listedCount = await count("[data-testid=page-picker] header");
+  assert.equal(listedCount, kinds.length);
+  assert.equal(await count("[data-testid=page-pill]"), listedCount, "the button and the picker agree");
   await A.keyboard.press("Escape");
   // The menu on a doc is the doc's: new, open, rename, the theme, about; nothing from the canvas.
   await A.click(".main-menu-trigger");
