@@ -16,17 +16,17 @@ const HEARTBEAT_MS = 30000;
  * @param {() => void} o.onEnd  a wait ended (idle time counts from then)
  */
 export function createWaits({ store, tabs, onEnd = () => {} }) {
-  const waits = new Map(); // id -> {id, page, frame, ask, consumer, started, res, timer, beat}
+  const waits = new Map(); // id -> {id, page, frames, ask, consumer, started, res, timer, beat}
   let next = 1;
 
-  const list = () => [...waits.values()].map(({ id, page, frame, ask, started }) => ({ id, page, frame, ask, started }));
+  const list = () => [...waits.values()].map(({ id, page, frames, ask, started }) => ({ id, page, frames, ask, started }));
   const announce = () => tabs.broadcast("waits", { waits: list() });
 
   /** Start waiting; the response is written when the wait ends. */
-  function start(res, { page, frame = null, ask, consumer = "default", timeoutMs = 0 }) {
+  function start(res, { page, frames = [], ask, consumer = "default", timeoutMs = 0 }) {
     const id = `w${next++}`;
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", ...SECURITY_HEADERS });
-    const w = { id, page, frame, ask, consumer, started: Date.now(), res };
+    const w = { id, page, frames, ask, consumer, started: Date.now(), res };
     // Whitespace before the JSON: harmless to a parser, enough for the client.
     w.beat = setInterval(() => res.write(" "), HEARTBEAT_MS);
     if (timeoutMs > 0) w.timer = setTimeout(() => finish(id, "timeout"), timeoutMs);
@@ -56,7 +56,7 @@ export function createWaits({ store, tabs, onEnd = () => {} }) {
     try {
       const r = store.changes(w.page, { since: "last", source: "user", consumer: w.consumer });
       const changes = brief(resolveChanges(r.entries, store.elements(w.page), store.bands(w.page)));
-      body = { page: w.page, frame: w.frame, done, waited: Math.round((Date.now() - w.started) / 1000), rev: r.rev, since: r.since, changes };
+      body = { page: w.page, frames: w.frames, done, waited: Math.round((Date.now() - w.started) / 1000), rev: r.rev, since: r.since, changes };
     } catch (err) {
       // The page went away meanwhile (deleted or renamed).
       body = { error: { code: err.code === "unknown_page" ? "unknown_page" : "internal", message: String(err.message || err) } };

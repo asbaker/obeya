@@ -321,9 +321,10 @@ async function execute(plan, { env, cwd, note, stdin, print }) {
     case "wait": {
       // Never open or switch a tab: the person keeps their focus. The page pill counts what's waiting.
       const i = await client.info();
-      if (!i?.showing?.includes(page)) note(`no tab shows ${page}; the request waits there: ${client.canvasUrl(page, flags.frame)}`);
+      const frames = flags.frame ? [...new Set(flags.frame.split(",").map((id) => id.trim()))] : [];
+      if (!i?.showing?.includes(page)) note(`no tab shows ${page}; the request waits there: ${client.canvasUrl(page, frames[0])}`);
       const timeoutMs = flags.timeout ? Math.round(Number(flags.timeout) * 60000) : 0;
-      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/wait`, { ask: flags.ask, frame: flags.frame, consumer: plan.consumer, timeoutMs });
+      const r = await client.call("POST", `/api/pages/${encodeURIComponent(page)}/wait`, { ask: flags.ask, frames, consumer: plan.consumer, timeoutMs });
       return { done: r.done, rev: r.rev, changes: r.changes };
     }
   }

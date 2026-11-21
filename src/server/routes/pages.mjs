@@ -314,12 +314,15 @@ export function pageRoutes({ store, tabs, pages, waits }) {
     ["POST", "/api/pages/:page/wait", async ({ req, res, params: { page: name } }) => {
       const body = await readJSON(req);
       requirePage(store, name);
-      requireElement(store, name, body.frame);
+      // frames: the frames to outline (frame: one, as older CLIs send it).
+      const frames = body.frames ?? (body.frame ? [body.frame] : []);
+      if (!Array.isArray(frames) || frames.some((f) => typeof f !== "string" || !f)) throw new ApiError(400, "invalid_argument", "frames is a list of frame ids");
+      for (const f of frames) requireElement(store, name, f);
       if (typeof body.ask !== "string" || !body.ask.trim() || body.ask.length > 500) throw new ApiError(400, "invalid_argument", "ask is the text to show the person (1-500 characters)");
       const timeoutMs = body.timeoutMs ?? 0;
       if (!(Number.isFinite(timeoutMs) && timeoutMs >= 0)) throw new ApiError(400, "invalid_argument", "timeoutMs must be a number of milliseconds, 0 for none");
       if (body.consumer !== undefined && !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(body.consumer)) throw new ApiError(400, "invalid_argument", "bad consumer name");
-      waits.start(res, { page: name, frame: body.frame ?? null, ask: body.ask.trim(), consumer: body.consumer, timeoutMs });
+      waits.start(res, { page: name, frames, ask: body.ask.trim(), consumer: body.consumer, timeoutMs });
     }],
     ["GET", "/api/waits", ({ res }) => json(res, 200, { waits: waits.list() })],
     // A tab: the person pressed Done.
