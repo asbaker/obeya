@@ -4,7 +4,7 @@ import { params, RENDERER, MAC, KEY_PAGES, KEY_PRESENT, KEY_EXPORT, S } from "./
 import { baseName, folderOf, shortFolder } from "/lib/names.mjs";
 import { getJSON, connectEvents } from "./server-link.mjs";
 import { flushSync, onChange } from "./sync.mjs";
-import { openPage } from "./pages.mjs";
+import { listedPages, openPage } from "./pages.mjs";
 import { presenting, setPresent, stepFrame, togglePresent } from "./present.mjs";
 import { linkForSelection, onLinkOpen } from "./links.mjs";
 import { loadLibraries } from "./render.mjs";
@@ -119,7 +119,7 @@ function Pill({ page, n, waiting, isMobile }) {
 }
 
 function App() {
-  const [ui, set] = React.useState({ pages: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [], update: null });
+  const [ui, set] = React.useState({ pages: [], docs: [], skipped: [], page: null, present: false, presentPos: null, hasFrames: false, waits: [], update: null });
   const [dialog, setDialog] = React.useState(dialogs.state);
   React.useEffect(() => dialogs.subscribe(setDialog), []);
   // A newer obeya is out: a dot on ☰ and a chip on About obeya until About is
@@ -142,10 +142,10 @@ function App() {
   const newPage = (S.newPage = (folder) => { set((s) => ({ ...s, newIn: folder ?? null })); openDialog("NEW"); });
 
   React.useEffect(() => {
-    getJSON("/api/pages").then(({ pages, skipped }) => set((s) => ({ ...s, pages, skipped }))).catch(() => {});
+    getJSON("/api/pages").then(({ pages, docs, skipped }) => set((s) => ({ ...s, pages, docs, skipped }))).catch(() => {});
   }, []);
 
-  const n = ui.pages.length;
+  const n = listedPages(ui).length;
   const waiting = new Set(ui.waits.map((w) => w.page)).size;
   const pill = (isMobile) => ui.present || RENDERER ? null : h(Pill, { page: ui.page, n, waiting, isMobile });
   const present = () => ui.present || RENDERER ? null :
@@ -213,7 +213,7 @@ function App() {
         RENDERER ? null : welcome(ui.page))),
     ui.present && ui.presentPos ? h(PresentControls, { pos: ui.presentPos }) : null,
     !RENDERER && !ui.present && ui.waits.some((w) => w.page === ui.page) ? h(WaitBanner, { waits: ui.waits.filter((w) => w.page === ui.page) }) : null,
-    dialog === "picker" ? h(PagePicker, { pages: ui.pages, skipped: ui.skipped, current: ui.page, waiting: new Set(ui.waits.map((w) => w.page)), onClose: closeDialog, onNew: (folder) => newPage(folder) }) : null,
+    dialog === "picker" ? h(PagePicker, { pages: ui.pages, docs: ui.docs, skipped: ui.skipped, current: ui.page, waiting: new Set(ui.waits.map((w) => w.page)), onClose: closeDialog, onNew: (folder) => newPage(folder) }) : null,
     dialog === "new" ? h(NewPageDialog, { names: ui.pages.map((p) => p.name), folder: ui.newIn ?? folderOf(ui.page ?? ""), onClose: closeDialog }) : null,
     dialog === "rename" ? h(RenameDialog, { current: ui.page, names: ui.pages.map((p) => p.name), onClose: closeDialog }) : null,
     dialog === "export" ? h(ExportDialog, { page: ui.page, onClose: closeDialog }) : null,

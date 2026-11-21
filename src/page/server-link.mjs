@@ -91,8 +91,8 @@ function openStream() {
   events.addEventListener("update", (e) => S.setUi((s) => ({ ...s, update: JSON.parse(e.data).update })));
   events.addEventListener("doc", (e) => import("./doc.mjs").then(({ reloadDoc }) => reloadDoc(JSON.parse(e.data).name)));
   events.addEventListener("pages", (e) => {
-    const { pages, skipped } = JSON.parse(e.data);
-    S.setUi((s) => ({ ...s, pages, skipped }));
+    const { pages, docs, skipped } = JSON.parse(e.data);
+    S.setUi((s) => ({ ...s, pages, docs, skipped }));
   });
   events.addEventListener("page-renamed", (e) => {
     const { from, to } = JSON.parse(e.data);
@@ -226,8 +226,8 @@ async function catchUp() {
     }
     await flushSync();
     reportUsed();
-    const { pages, skipped } = await getJSON("/api/pages");
-    S.setUi((s) => ({ ...s, pages, skipped }));
+    const { pages, docs, skipped } = await getJSON("/api/pages");
+    S.setUi((s) => ({ ...s, pages, docs, skipped }));
   } catch (err) {
     toast(`Reconnected, but couldn't catch up: ${err.message}`, { duration: 6000 });
   }
