@@ -159,18 +159,19 @@ export const COMMANDS = {
     live: true,
   },
   wait: {
-    usage: "wait <page> --ask <text> [--frame <id>] [--timeout <minutes>] [--consumer <name>]",
+    usage: "wait <page> --ask <text> [--frame <id>[,<id>...]] [--timeout <minutes>] [--consumer <name>]",
     summary: "Ask the person for something on a page; return their changes when they press Done",
     page: true,
     flags: ["ask", "frame", "timeout", "consumer"],
     required: ["ask"],
     details: [
-      "Shows --ask in a banner with a Done button on tabs showing the page; opens no tab. No timeout by default.",
+      "Shows --ask in a banner with a Done button on tabs showing the page, each --frame outlined; opens no tab. No timeout by default.",
       "Returns {done, rev, changes}; done is button, timeout or stopped. Run it in the background.",
     ],
     validate(plan, bad) {
-      const { ask, timeout } = plan.flags;
+      const { ask, timeout, frame } = plan.flags;
       if (!ask.trim() || ask.length > 500) throw bad("--ask is the text to show the person (1-500 characters)");
+      if (frame !== undefined && frame.split(",").some((id) => !id.trim())) throw bad("--frame is a frame id, or several separated by commas");
       if (timeout !== undefined && !(/^\d+(\.\d+)?$/.test(timeout) && Number(timeout) > 0)) throw bad("--timeout is a number of minutes");
     },
   },

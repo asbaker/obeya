@@ -1446,7 +1446,7 @@ test("images: an agent patches an image in by path; it is drawn, saved inside th
   for (const t of tabs) await t.close();
 });
 
-test("wait: the ask shows on that page's tab only (other tabs count it in the pill), the frame outlined; Done returns the person's changes", { skip }, async () => {
+test("wait: the ask shows on that page's tab only (other tabs count it in the pill), each frame outlined; Done returns the person's changes", { skip }, async () => {
   const opened = await cli(["open", "board", "--no-open"]);
   const u = new URL(opened.json.error?.url ?? opened.json.result.url);
   u.searchParams.set("test", "1");
@@ -1466,10 +1466,11 @@ test("wait: the ask shows on that page's tab only (other tabs count it in the pi
   await cli(["changes", "board"]); // the agent is up to date
   await A.bringToFront();
 
-  const waiting = cli(["wait", "board", "--ask", "Move the first note, then press Done", "--frame", "f1"]);
+  const waiting = cli(["wait", "board", "--ask", "Move the first note, then press Done", "--frame", "f1,f2"]);
   await A.waitForSelector('[data-testid="wait-banner"]', { timeout: 10000 });
   assert.equal(await A.textContent('[data-testid="wait-ask"]'), "Move the first note, then press Done");
   assert.ok(await A.isVisible('[data-testid="wait-frame"]'), "the frame is outlined");
+  assert.deepEqual(await A.evaluate(() => [...document.querySelectorAll('[data-testid="wait-frame"]')].map((e) => e.dataset.frame)), ["f1", "f2"], "every frame is outlined");
   assert.match(await A.title(), /^● obeya - board$/);
   // Excalidraw's menus open over it: Done is clickable, then with More tools (⋮) open its items are on top.
   const topmost = (sel) => A.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => {

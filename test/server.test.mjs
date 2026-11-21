@@ -375,7 +375,7 @@ test("wait: the ask is listed for tabs; Done answers with the person's changes; 
   const waiting = run(["wait", "board", "--ask", "Circle what's wrong", "--frame", "f1", "--no-open"], { env });
   await until(async () => (await waits()).length === 1);
   const [w] = await waits();
-  assert.deepEqual([w.page, w.frame, w.ask], ["board", "f1", "Circle what's wrong"]);
+  assert.deepEqual([w.page, w.frames, w.ask], ["board", ["f1"], "Circle what's wrong"]);
   await sync([rect("n1", { version: 2, x: 40 })]);
   assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).status, 200);
   const r = await waiting;
@@ -387,6 +387,18 @@ test("wait: the ask is listed for tabs; Done answers with the person's changes; 
   assert.deepEqual(await waits(), []);
   assert.deepEqual(j(await run(["changes", "board"], { env })).result.changes, [], "the wait moved the agent's cursor");
   assert.equal((await raw(port, { method: "POST", path: `/api/waits/${w.id}/done`, headers: H(), body: {} })).json.error.code, "unknown_wait");
+
+  // Several frames: all listed for the tabs, each one checked.
+  await sync([{ id: "f2", type: "frame", x: 400, y: -50, width: 400, height: 300, version: 1, versionNonce: 1 }]);
+  await run(["changes", "board"], { env });
+  const both = run(["wait", "board", "--ask", "One sticky per frame", "--frame", "f1,f2", "--no-open"], { env });
+  await until(async () => (await waits()).length === 1);
+  const [w2] = await waits();
+  assert.deepEqual(w2.frames, ["f1", "f2"]);
+  await raw(port, { method: "POST", path: `/api/waits/${w2.id}/done`, headers: H(), body: {} });
+  assert.equal(j(await both).result.done, "button");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--frame", "f1,nope", "--no-open"], { env })).error.code, "unknown_element");
+  assert.equal(j(await run(["wait", "board", "--ask", "x", "--frame", "f1,", "--no-open"], { env })).error.code, "invalid_argument");
 
   // A timeout answers with what there is.
   const timed = j(await run(["wait", "board", "--ask", "Anything?", "--timeout", "0.005", "--no-open"], { env })).result;

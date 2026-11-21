@@ -46,29 +46,30 @@ if (!RENDERER) {
   }, true);
 }
 
-// The frame's box on screen, kept in step with scrolling and zooming.
-function useFrameBox(frameId) {
-  const [box, setBox] = React.useState(null);
+// The frames' boxes on screen, kept in step with scrolling and zooming.
+const sameBox = (a, b) => ["left", "top", "width", "height"].every((k) => Math.abs(a[k] - b[k]) < 0.5);
+function useFrameBoxes(frameIds) {
+  const [boxes, setBoxes] = React.useState([]);
+  const key = frameIds.join(",");
   React.useEffect(() => {
-    if (!frameId || !S.api) return setBox(null);
-    let raf = 0;
+    if (!frameIds.length || !S.api) return setBoxes([]);
     const measure = () => {
-      raf = 0;
-      const f = S.api.getSceneElements().find((e) => e.id === frameId);
-      if (!f) return setBox(null);
+      const byId = new Map(S.api.getSceneElements().map((e) => [e.id, e]));
       const { scrollX, scrollY, zoom, offsetLeft, offsetTop } = S.api.getAppState();
       const z = zoom.value;
-      const next = { left: (f.x + scrollX) * z + offsetLeft, top: (f.y + scrollY) * z + offsetTop, width: f.width * z, height: f.height * z };
-      setBox((b) => (b && ["left", "top", "width", "height"].every((k) => Math.abs(b[k] - next[k]) < 0.5) ? b : next));
+      const next = frameIds.map((id) => byId.get(id)).filter(Boolean)
+        .map((f) => ({ id: f.id, left: (f.x + scrollX) * z + offsetLeft, top: (f.y + scrollY) * z + offsetTop, width: f.width * z, height: f.height * z }));
+      setBoxes((b) => (b.length === next.length && b.every((x, i) => x.id === next[i].id && sameBox(x, next[i])) ? b : next));
     };
-    const schedule = () => { if (!raf) raf = requestAnimationFrame(measure); };
     measure();
     // Scrolling and zooming change the app state, which the editor reports as a change.
-    const off = typeof S.api.onChange === "function" ? S.api.onChange(schedule) : (() => { const t = setInterval(schedule, 200); return () => clearInterval(t); })();
-    window.addEventListener("resize", schedule);
-    return () => { off?.(); cancelAnimationFrame(raf); window.removeEventListener("resize", schedule); };
-  }, [frameId]);
-  return box;
+    // Measure right then, not on the next animation frame: a frame later, the
+    // outlines trail the drawing by one step on every pan.
+    const off = typeof S.api.onChange === "function" ? S.api.onChange(measure) : (() => { const t = setInterval(measure, 200); return () => clearInterval(t); })();
+    window.addEventListener("resize", measure);
+    return () => { off?.(); window.removeEventListener("resize", measure); };
+  }, [key]);
+  return boxes;
 }
 
 // "2 min": how long the agent has waited, kept fresh.
@@ -82,10 +83,11 @@ function useMinuteTick() {
 }
 
 export function WaitBanner({ waits }) {
-  const box = useFrameBox(waits.find((w) => w.frame)?.frame ?? null);
+  // Every frame any wait on this page asks about is outlined.
+  const boxes = useFrameBoxes([...new Set(waits.flatMap((w) => w.frames ?? []))]);
   useMinuteTick();
   return h(React.Fragment, null,
-    box ? h("div", { className: "xl-wait-frame", "data-testid": "wait-frame", style: { left: box.left - 6, top: box.top - 6, width: box.width + 12, height: box.height + 12 } }) : null,
+    boxes.map((box) => h("div", { key: box.id, className: "xl-wait-frame", "data-testid": "wait-frame", "data-frame": box.id, style: { left: box.left - 6, top: box.top - 6, width: box.width + 12, height: box.height + 12 } })),
     h("div", { className: "xl-waits" },
       waits.map((w, i) => h("div", { key: w.id, className: "xl-wait", role: "status", "data-testid": "wait-banner" },
         h("span", { className: "xl-wait-icon", "aria-hidden": true }, h("img", { src: "/page/logo.svg", alt: "" })),
